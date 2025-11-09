@@ -2,9 +2,16 @@
 com.lendmark
  │
  ├─ ui/
- │   ├─ auth/                      // 로그인 관련
- │   │    ├─ LoginActivity.kt
- │   │    ├─ LoginViewModel.kt
+ │   ├─ auth/
+ │   │    ├─ AuthActivity.kt           // 로그인/회원가입 호스트
+ │   │
+ │   │    ├─ login/
+ │   │    │    ├─ LoginFragment.kt
+ │   │    │    └─ LoginViewModel.kt
+ │   │
+ │   │    ├─ signup/
+ │   │    │    ├─ SignupFragment.kt
+ │   │    │    └─ SignupViewModel.kt
  │   │  
  │   │
  │   ├─ main/                      // 메인 프레임 (BottomNav)
