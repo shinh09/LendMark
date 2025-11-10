@@ -108,7 +108,7 @@
             android:layout_height="wrap_content"
             app:boxBackgroundMode="filled"
             app:boxBackgroundColor="#F9FAFB"
-            android:hint="Phone Number (e.g., 010-0000-0000)">
+            android:hint="Phone Number (010-0000-0000)">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etPhone"
@@ -154,7 +154,7 @@
             android:layout_height="wrap_content"
             app:boxBackgroundMode="filled"
             app:boxBackgroundColor="#F9FAFB"
-            android:hint="School Email (e.g., example@seoultech.ac.kr)">
+            android:hint="School Email (example@seoultech.ac.kr)">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etEmailForPw"

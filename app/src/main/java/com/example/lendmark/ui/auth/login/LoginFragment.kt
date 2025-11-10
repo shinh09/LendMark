@@ -32,7 +32,7 @@ class LoginFragment : Fragment() {
 
         // Login button click
         binding.btnLogin.setOnClickListener {
-            val email = binding.etEmail.text.toString().trim()
+            val email = binding.etEmailId.text.toString().trim()
             val password = binding.etPassword.text.toString().trim()
             viewModel.login(email, password)
         }

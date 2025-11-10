@@ -21,16 +21,16 @@ class EmailVerifyDialog(
         val builder = AlertDialog.Builder(requireContext())
             .setView(binding.root)
 
-        binding.tvDescription.text = "$email 로 전송된 인증 코드를 입력해주세요."
+        binding.tvDescription.text = "Please enter the verification code sent to $email."
 
-        // 인증 확인 버튼
+        // Confirm button
         binding.btnConfirm.setOnClickListener {
             val code = binding.etCode.text.toString()
-            onVerify(code)  // ✅ 부모 프래그먼트(SignupFragment)에 전달
+            onVerify(code)  // Pass to parent fragment (SignupFragment)
             dismiss()
         }
 
-        // 닫기 버튼 (X)
+        // Close button (X)
         binding.btnClose.setOnClickListener { dismiss() }
 
         return builder.create()

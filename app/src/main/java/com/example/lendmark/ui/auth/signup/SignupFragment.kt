@@ -29,39 +29,41 @@ class SignupFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Department Spinner (Temporary example data)
+        // Department Spinner
         val departments = listOf("Computer Science", "Industrial Engineering", "Mechanical Engineering", "Design")
         val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, departments)
         binding.spinnerDept.adapter = adapter
 
-        // Email verification button -> Show popup
+        // 이메일 인증 버튼 클릭 시
         binding.btnVerify.setOnClickListener {
-            val email = binding.etEmail.text.toString()
+            val emailId = binding.etEmailId.text.toString().trim()
+            val fullEmail = "$emailId@seoultech.ac.kr"
 
-            if (email.isBlank()) {
-                Toast.makeText(requireContext(), "Please enter your email.", Toast.LENGTH_SHORT).show()
+            if (emailId.isBlank()) {
+                Toast.makeText(requireContext(), "Please enter your email ID.", Toast.LENGTH_SHORT).show()
             } else {
-                // Show popup dialog
-                val dialog = EmailVerifyDialog(email) { code ->
-                    viewModel.verifyCode(email, code)  // Pass the verification code received from the popup
+                // 이메일 인증 다이얼로그 실행
+                val dialog = EmailVerifyDialog(fullEmail) { code ->
+                    viewModel.verifyCode(fullEmail, code)  // 인증 코드 검증
                 }
                 dialog.show(parentFragmentManager, "EmailVerifyDialog")
             }
         }
 
-        // Sign up complete button
+        // 회원가입 완료 버튼
         binding.btnSignupDone.setOnClickListener {
             val name = binding.etName.text.toString()
-            val email = binding.etEmail.text.toString()
+            val emailId = binding.etEmailId.text.toString().trim()
+            val fullEmail = "$emailId@seoultech.ac.kr"
             val phone = binding.etPhone.text.toString()
             val dept = binding.spinnerDept.selectedItem.toString()
             val password = binding.etPassword.text.toString()
             val confirmPw = binding.etConfirmPassword.text.toString()
 
-            viewModel.signup(name, email, phone, dept, password, confirmPw)
+            viewModel.signup(name, fullEmail, phone, dept, password, confirmPw)
         }
 
-        // Result observer
+        // 회원가입 성공 시
         viewModel.signupResult.observe(viewLifecycleOwner) { success ->
             if (success) {
                 Toast.makeText(requireContext(), "Sign up successful!", Toast.LENGTH_SHORT).show()
@@ -69,13 +71,14 @@ class SignupFragment : Fragment() {
             }
         }
 
+        // 에러 메시지 처리
         viewModel.errorMessage.observe(viewLifecycleOwner) { msg ->
             if (!msg.isNullOrEmpty()) {
                 Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
             }
         }
 
-        // Back button
+        // 뒤로가기 버튼
         binding.btnBack.setOnClickListener {
             findNavController().navigateUp()
         }
