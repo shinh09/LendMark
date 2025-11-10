@@ -6,7 +6,8 @@ import androidx.lifecycle.ViewModel
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.example.lendmark.utils.Event
-import kotlin.math.E
+import com.google.firebase.auth.FirebaseAuth
+
 
 class SignupViewModel : ViewModel() {
 
@@ -61,36 +62,35 @@ class SignupViewModel : ViewModel() {
             return
         }
 
-        val userId = email.substringBefore("@")
-        val userData = hashMapOf(
-            "name" to name,
-            "email" to email,
-            "phone" to phone,
-            "dept" to dept,
-            "password" to pw
-        )
+        val auth = FirebaseAuth.getInstance()
 
-        db.collection("users").document(userId)
-            .set(userData)
-            .addOnSuccessListener {
-                _signupResult.value = Event(true)
+        // Firebase Authentication에 계정 생성
+        auth.createUserWithEmailAndPassword(email, pw)
+            .addOnSuccessListener { result ->
+                val uid = result.user?.uid ?: return@addOnSuccessListener
+                val userData = hashMapOf(
+                    "uid" to uid,
+                    "name" to name,
+                    "email" to email,
+                    "phone" to phone,
+                    "department" to dept,
+                    "favorites" to emptyList<String>()
+                )
+
+                db.collection("users").document(uid)
+                    .set(userData)
+                    .addOnSuccessListener {
+                        _signupResult.value = Event(true)
+                    }
+                    .addOnFailureListener {
+                        _errorMessage.value = Event("Failed to save user data: ${it.message}")
+                    }
             }
             .addOnFailureListener {
                 _errorMessage.value = Event("Sign up failed: ${it.message}")
             }
     }
 
-    fun requestEmailCode(email: String) {
-        functions
-            .getHttpsCallable("sendVerificationCode")
-            .call(hashMapOf("email" to email))
-            .addOnSuccessListener {
-                _errorMessage.value = Event("Authentication Code Sent to ${email}.")
-            }
-            .addOnFailureListener {
-                _errorMessage.value = Event("Failed to send email: ${it.message}")
-            }
-    }
 
 
     fun verifyCode(email: String, code: String) {
