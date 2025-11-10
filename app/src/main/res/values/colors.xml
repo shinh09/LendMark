@@ -12,6 +12,7 @@
     <color name="colorPrimary">#190848</color>
     <color name="colorPrimaryDark">#140638</color>
     <color name="colorAccent">#F06292</color>
+    <color name="purple_700">#FF3700B3</color>
 
     <!-- Background & Text Colors -->
     <color name="background_light">#F5F5F5</color>

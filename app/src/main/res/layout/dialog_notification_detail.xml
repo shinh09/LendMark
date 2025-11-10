@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="24dp"
+    android:gravity="center_horizontal">
+
+<TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Classroom reservation starts in 30 minutes"
+        android:textColor="#190848"
+        android:textStyle="bold"
+        android:textSize="17sp"
+        android:gravity="center"
+        android:textAlignment="center" />
+
+    <TextView
+        android:id="@+id/tvDetail"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Reservation details: Frontier Hall #107"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/gray_dark" />
+
+    <Button
+        android:id="@+id/btnGoReservation"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="Go to Reservation Details"
+        android:textColor="@android:color/white"
+        android:backgroundTint="#190848"
+        android:layout_marginTop="16dp"/>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnConfirm"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="확인"
+        android:textColor="#190848"
+        android:textSize="15sp"
+        android:layout_marginTop="8dp"
+        app:cornerRadius="12dp"
+        app:strokeColor="#D1D5DB"
+        app:strokeWidth="1dp"
+        android:backgroundTint="@android:color/white"/>
+</LinearLayout>
