@@ -9,9 +9,10 @@ import com.example.lendmark.R
 import com.example.lendmark.ui.home.HomeFragment
 import com.example.lendmark.ui.my.MyPageFragment
 import com.example.lendmark.ui.notification.NotificationListFragment
-import com.example.lendmark.ui.reservation.BuildingListFragment
+import com.example.lendmark.ui.reservation.building.BuildingListFragment
 import com.example.lendmark.ui.reservation.ReservationMapFragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
+
 
 class MainActivity : AppCompatActivity() {
 
