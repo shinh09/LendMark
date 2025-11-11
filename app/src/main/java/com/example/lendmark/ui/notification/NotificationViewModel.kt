@@ -6,52 +6,52 @@ import androidx.lifecycle.ViewModel
 
 class NotificationViewModel : ViewModel() {
 
-    // 알림 리스트 데이터 (읽기 전용 LiveData)
+    // Notification list data (read-only LiveData)
     private val _notifications = MutableLiveData<List<NotificationItem>>()
     val notifications: LiveData<List<NotificationItem>> get() = _notifications
 
-    // 선택된 알림 (예: 다이얼로그에 표시할 항목)
+    // Selected notification (e.g., for display in a dialog)
     private val _selectedNotification = MutableLiveData<NotificationItem?>()
     val selectedNotification: LiveData<NotificationItem?> get() = _selectedNotification
 
     init {
-        // 임시 데이터 (테스트용)
+        // Temporary data for testing
         _notifications.value = listOf(
             NotificationItem(
                 id = 1,
-                title = "강의실 예약 시작 30분 전입니다",
-                detail = "예약 내역: 프론티어관 107호",
+                title = "Classroom reservation starts in 30 minutes",
+                detail = "Reservation details: Frontier Hall #107",
                 time = "2025-10-23 18:54"
             ),
             NotificationItem(
                 id = 2,
-                title = "강의실 예약 종료 10분 전입니다",
-                detail = "예약 내역: 미래관 205호",
+                title = "Classroom reservation ends in 10 minutes",
+                detail = "Reservation details: Mirae Hall #205",
                 time = "2025-10-23 20:14"
             )
         )
     }
 
-    // 알림 항목 클릭 시 호출
+    // Called when a notification item is clicked
     fun selectNotification(item: NotificationItem) {
         _selectedNotification.value = item
         markAsRead(item.id)
     }
 
-    //  읽음 처리
+    // Mark a notification as read
     private fun markAsRead(notificationId: Int) {
         _notifications.value = _notifications.value?.map {
             if (it.id == notificationId) it.copy(isRead = true) else it
         }
     }
 
-    // (옵션) 새로운 알림 추가
+    // (Optional) Add a new notification
     fun addNotification(newItem: NotificationItem) {
         val current = _notifications.value ?: emptyList()
         _notifications.value = listOf(newItem) + current
     }
 
-    // (옵션) 전체 읽음 처리
+    // (Optional) Mark all as read
     fun markAllAsRead() {
         _notifications.value = _notifications.value?.map { it.copy(isRead = true) }
     }

@@ -67,7 +67,7 @@ class MainActivity : AppCompatActivity() {
         // 상단 오른쪽 알림 버튼 클릭 시 → 알림 화면으로 전환
         btnNotification.setOnClickListener {
             replaceFragment(NotificationListFragment())
-            tvHeaderTitle.text = "알림"
+            tvHeaderTitle.text = "Notifications"
 
             // ☰ → ← 로 변경
             btnMenu.setImageResource(R.drawable.ic_arrow_back)
