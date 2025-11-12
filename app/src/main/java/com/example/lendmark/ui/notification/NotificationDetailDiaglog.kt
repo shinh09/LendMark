@@ -6,6 +6,8 @@ import android.view.LayoutInflater
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.example.lendmark.databinding.DialogNotificationDetailBinding
+import com.example.lendmark.ui.my.Reservation // Import Reservation data class
+import com.example.lendmark.ui.my.ReservationDetailDialog // Import the target dialog
 
 class NotificationDetailDialog(
     private val item: NotificationItem
@@ -18,10 +20,30 @@ class NotificationDetailDialog(
         binding.tvTitle.text = item.title
         binding.tvDetail.text = "Reservation at: ${item.location} (${item.startTime} - ${item.endTime})"
 
-        // "Go to Reservation Details" button (functionality not yet implemented)
+        // Connect the "Go to Reservation Details" button
         binding.btnGoReservation.setOnClickListener {
-            // TODO: Navigate to reservation details page (to be implemented later)
+            // Dismiss the current simple dialog
             dismiss()
+
+            // Create a temporary Reservation object from the NotificationItem's data
+            val reservationData = Reservation(
+                id = item.id,
+                building = item.location.split(" ").firstOrNull() ?: item.location, // Simple name extraction
+                room = item.location,
+                date = item.date,
+                time = "${item.startTime} - ${item.endTime}",
+                attendees = 0, // This info isn't in the notification
+                purpose = "(Details in My Reservations)", // This info isn't in the notification
+                status = "Approved", // Assume a status to show the correct buttons
+                isCancelled = false
+            )
+
+            // Create and show the detailed dialog, passing a lambda for the cancel click
+            val detailDialog = ReservationDetailDialog(reservationData) { reservationId ->
+                // This callback would be handled by the parent fragment if needed
+                // For now, we just define it to satisfy the constructor
+            }
+            detailDialog.show(parentFragmentManager, "ReservationDetailDialog")
         }
 
         // OK button
