@@ -7,6 +7,6 @@ data class Building(
     val imageUrl: String = "",           // 건물 이미지 URL
     val naverMapLat: Double = 0.0,       // 네이버 지도 위도
     val naverMapLng: Double = 0.0,       // 네이버 지도 경도
-    val timetable: Map<String, List<Lecture>> = emptyMap() // 강의실별 시간표
+    //val timetable: Map<String, List<Lecture>> = emptyMap() // 강의실별 시간표
 )
 

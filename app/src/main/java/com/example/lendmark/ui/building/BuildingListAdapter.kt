@@ -15,6 +15,7 @@ class BuildingListAdapter(
     inner class ViewHolder(val binding: ItemBuildingBinding) :
         RecyclerView.ViewHolder(binding.root)
 
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val binding =
             ItemBuildingBinding.inflate(LayoutInflater.from(parent.context), parent, false)
@@ -25,8 +26,8 @@ class BuildingListAdapter(
         val building = buildings[position]
         with(holder.binding) {
             tvBuildingName.text = building.name
-            tvBuildingCode.text = "코드: ${building.code}"
-            tvBuildingRooms.text = "예약 가능한 강의실 ${building.rooms}개"
+            tvBuildingCode.text = "건물 번호 : ${building.code}"
+            tvBuildingRooms.text = "예약 가능한 강의실 ${building.roomCount}개"
 
             Glide.with(imgBuilding.context)
                 .load(building.imageUrl)

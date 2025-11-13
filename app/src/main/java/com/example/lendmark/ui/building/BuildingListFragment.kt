@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.lendmark.R
 import com.example.lendmark.data.model.Building
 import com.example.lendmark.databinding.FragmentBuildingListBinding
 import com.google.firebase.firestore.FirebaseFirestore
@@ -33,7 +34,6 @@ class BuildingListFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         adapter = BuildingListAdapter(buildingList) { building ->
-            // 🔹 클릭 시 강의실 리스트 페이지로 이동 (다음 단계에서 구현)
             val bundle = Bundle().apply {
                 putString("buildingName", building.name)
                 putInt("buildingCode", building.code)
@@ -41,7 +41,7 @@ class BuildingListFragment : Fragment() {
                 putDouble("lng", building.naverMapLng)
             }
             findNavController().navigate(
-                com.example.lendmark.R.id.action_buildingList_to_roomList,
+                R.id.action_buildingList_to_roomList,
                 bundle
             )
         }
@@ -53,17 +53,29 @@ class BuildingListFragment : Fragment() {
     }
 
     private fun loadBuildings() {
-        db.collection("buildings").get()
+        db.collection("buildings")
+            .orderBy("code")   // 🔥 건물 번호 순으로 정렬
+            .get()
             .addOnSuccessListener { result ->
                 buildingList.clear()
+
                 for (doc in result) {
                     val building = doc.toObject(Building::class.java)
-                    buildingList.add(building)
+
+                    // 🔥 essential 필드 null 방지 — 앱 크래시 방지용
+                    if (building.name.isNotEmpty() && building.code != 0) {
+                        buildingList.add(building)
+                    }
                 }
+
                 adapter.notifyDataSetChanged()
             }
             .addOnFailureListener { e ->
-                Toast.makeText(requireContext(), "건물 목록을 불러오지 못했습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(),
+                    "건물 목록 불러오기 실패: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
     }
 
