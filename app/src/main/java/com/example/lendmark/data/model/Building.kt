@@ -1,7 +1,6 @@
 package com.example.lendmark.data.model
 
 data class Building(
-    var id: String = "",                 // Firestore 문서 ID
     val name: String = "",               // 건물 이름
     val code: Int = 0,                   // 건물 고유 번호
     val roomCount: Int = 0,              // 이용 가능한 강의실 수

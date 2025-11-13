@@ -4,98 +4,56 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="16dp"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="6dp"
+    android:layout_marginBottom="12dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="4dp"
     android:foreground="?attr/selectableItemBackground"
     android:clickable="true">
 
     <LinearLayout
-        android:orientation="vertical"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="20dp">
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical">
 
-        <!-- 1) 강의실 이름 -->
-        <TextView
-            android:id="@+id/tvRoomName"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="다산관 301호"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            android:textColor="#111111"/>
+        <ImageView
+            android:id="@+id/imgRoom"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_room"
+            app:tint="#190848" />
 
-        <!-- 2) 인원 + 층 표시 -->
         <LinearLayout
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp">
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingStart="12dp">
 
-            <!-- 사람 아이콘 -->
-            <ImageView
-                android:id="@+id/ivCapacityIcon"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:src="@drawable/ic_people"
-                app:tint="#6B7280"/>
-
-            <!-- 수용 인원 -->
             <TextView
-                android:id="@+id/tvCapacity"
+                android:id="@+id/tvRoomName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="40명"
-                android:textColor="#6B7280"
-                android:textSize="14sp"
-                android:layout_marginStart="4dp"/>
+                android:text="107호"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#190848" />
 
-            <!-- 층 정보 -->
             <TextView
-                android:id="@+id/tvFloor"
+                android:id="@+id/tvRoomStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="3F"
-                android:textColor="#6B7280"
+                android:text="예약 가능"
                 android:textSize="14sp"
-                android:layout_marginStart="12dp"/>
+                android:textColor="#6B7280" />
         </LinearLayout>
 
-        <!-- 구분선 -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#E5E7EB"
-            android:layout_marginTop="14dp"
-            android:layout_marginBottom="14dp"/>
-
-        <!-- 3) 하단 버튼 -->
-        <LinearLayout
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content">
-
-            <!-- 즐겨찾기 아이콘 -->
-            <ImageView
-                android:id="@+id/ivStar"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:src="@drawable/ic_star"
-                app:tint="#4C3F8F"/>
-
-            <TextView
-                android:id="@+id/tvMoreInfo"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="강의실 정보 보기"
-                android:textColor="#4C3F8F"
-                android:textSize="14sp"
-                android:layout_marginStart="6dp"/>
-        </LinearLayout>
-
+        <ImageView
+            android:id="@+id/btnNext"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_arrow_right"
+            app:tint="#190848" />
     </LinearLayout>
-
 </com.google.android.material.card.MaterialCardView>

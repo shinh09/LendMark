@@ -3,23 +3,23 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:orientation="vertical"
-    android:padding="20dp"
-    android:background="#FFFFFF"
+    android:padding="16dp"
+    android:background="@color/white"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".ui.room.RoomListFragment">
 
-    <!-- 선택한 건물 이름 -->
+    <!-- 상단 타이틀 -->
     <TextView
         android:id="@+id/tvBuildingTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="건물 이름"
-        android:textSize="22sp"
+        android:textSize="20sp"
         android:textStyle="bold"
-        android:textColor="#190848"
         android:gravity="center"
-        android:layout_marginBottom="20dp" />
+        android:textColor="#190848"
+        android:layout_marginBottom="16dp" />
 
     <!-- 강의실 리스트 -->
     <androidx.recyclerview.widget.RecyclerView
