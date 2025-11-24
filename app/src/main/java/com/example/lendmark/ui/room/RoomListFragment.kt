@@ -58,7 +58,8 @@ class RoomListFragment : Fragment() {
                 }
 
                 (requireActivity() as MainActivity).replaceFragment(
-                    RoomScheduleFragment().apply { arguments = bundle }
+                    RoomScheduleFragment().apply { arguments = bundle },
+                    room.name
                 )
             },
             onMoreInfoClick = { room ->
@@ -131,5 +132,3 @@ class RoomListFragment : Fragment() {
         _binding = null
     }
 }
-
-

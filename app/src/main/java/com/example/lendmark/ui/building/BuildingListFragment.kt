@@ -42,7 +42,8 @@ class BuildingListFragment : Fragment() {
             }
 
             (requireActivity() as MainActivity).replaceFragment(
-                RoomListFragment().apply { arguments = bundle }
+                RoomListFragment().apply { arguments = bundle },
+                building.name
             )
         }
 

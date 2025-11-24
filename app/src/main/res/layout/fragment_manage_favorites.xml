@@ -6,16 +6,6 @@
     android:orientation="vertical"
     android:background="@color/background_light">
 
-    <!-- 상단 툴바 -->
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbarFavorites"
-        android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@color/colorPrimary"
-        android:title="즐겨찾는 건물"
-        android:titleTextColor="@android:color/white"/>
-<!--        app:navigationIcon="@drawable/ic_arrow_back_24" -->
-
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -31,10 +21,11 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="즐겨찾는 건물"
-                android:textSize="16sp"
+                android:text="Favorite Buildings"
+                android:textSize="18sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
+                android:layout_marginTop="15dp"
                 android:layout_marginBottom="8dp" />
 
             <LinearLayout
@@ -50,7 +41,7 @@
                 style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="+ 건물 추가"
+                android:text="+ Add Building"
                 android:textAllCaps="false"
                 android:textColor="@color/white"
                 android:backgroundTint="@color/colorPrimary"
@@ -60,8 +51,8 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="전체 건물"
-                android:textSize="14sp"
+                android:text="All Buildings"
+                android:textSize="18sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
                 android:layout_marginBottom="8dp" />

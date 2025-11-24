@@ -69,6 +69,7 @@
                 android:id="@+id/tvUserName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="3dp"
                 android:text="Kim Seoul"
                 android:textColor="@color/white"
                 android:textSize="18sp"

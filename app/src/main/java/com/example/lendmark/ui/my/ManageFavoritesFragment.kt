@@ -10,7 +10,6 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.example.lendmark.R
 import com.example.lendmark.data.model.Building // Assuming Building model exists
-import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -34,14 +33,11 @@ class ManageFavoritesFragment : Fragment() {
     ): View {
         val view = inflater.inflate(R.layout.fragment_manage_favorites, container, false)
 
-        val toolbar = view.findViewById<MaterialToolbar>(R.id.toolbarFavorites)
         favoriteContainer = view.findViewById(R.id.layoutFavoriteBuildings)
         allContainer = view.findViewById(R.id.layoutAllBuildings)
         btnAddBuilding = view.findViewById(R.id.btnAddBuilding)
 
-        toolbar.setNavigationOnClickListener { requireActivity().onBackPressedDispatcher.onBackPressed() }
-
-        loadDataFromFirestore() // Replace mock data with Firestore data
+        loadDataFromFirestore()
 
         btnAddBuilding.setOnClickListener {
             showAddBuildingDialog()
@@ -82,7 +78,7 @@ class ManageFavoritesFragment : Fragment() {
 
         if (favoriteBuildings.isEmpty()) {
             val tv = TextView(requireContext()).apply {
-                text = "즐겨찾는 건물을 추가해 주세요."
+                text = "Please add favorite buildings."
                 setTextColor(resources.getColor(R.color.text_secondary, null))
                 textSize = 14f
             }
@@ -93,8 +89,7 @@ class ManageFavoritesFragment : Fragment() {
         favoriteBuildings.forEach { building ->
             val itemView = inflater.inflate(R.layout.item_favorite_building, favoriteContainer, false)
             itemView.findViewById<TextView>(R.id.tvFavoriteName).text = building.name
-            itemView.findViewById<TextView>(R.id.tvFavoriteRooms).text = "${building.roomCount}개 강의실"
-            // You might need an 'X' or 'remove' button here to remove a favorite
+            itemView.findViewById<TextView>(R.id.tvFavoriteRooms).text = "${building.roomCount} classrooms"
             favoriteContainer.addView(itemView)
         }
     }
@@ -107,7 +102,7 @@ class ManageFavoritesFragment : Fragment() {
             val itemView = inflater.inflate(R.layout.item_all_building, allContainer, false)
 
             itemView.findViewById<TextView>(R.id.tvAllName).text = building.name
-            itemView.findViewById<TextView>(R.id.tvAllRooms).text = "${building.roomCount}개 강의실"
+            itemView.findViewById<TextView>(R.id.tvAllRooms).text = "${building.roomCount} classrooms"
 
             val tvStar = itemView.findViewById<TextView>(R.id.tvAllStar)
             tvStar.visibility = if (favoriteBuildings.any { it.id == building.id }) View.VISIBLE else View.INVISIBLE
