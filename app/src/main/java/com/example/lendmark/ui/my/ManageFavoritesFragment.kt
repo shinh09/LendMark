@@ -6,10 +6,15 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.example.lendmark.R
+import com.example.lendmark.data.model.Building // Assuming Building model exists
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 
 class ManageFavoritesFragment : Fragment() {
 
@@ -17,30 +22,26 @@ class ManageFavoritesFragment : Fragment() {
     private lateinit var allContainer: LinearLayout
     private lateinit var btnAddBuilding: MaterialButton
 
+    private val db = FirebaseFirestore.getInstance()
+    private val userId = FirebaseAuth.getInstance().currentUser?.uid
+
     private val allBuildings = mutableListOf<Building>()
     private val favoriteBuildings = mutableListOf<Building>()
 
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
+        inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
         val view = inflater.inflate(R.layout.fragment_manage_favorites, container, false)
 
-        // 뷰 바인딩
         val toolbar = view.findViewById<MaterialToolbar>(R.id.toolbarFavorites)
         favoriteContainer = view.findViewById(R.id.layoutFavoriteBuildings)
         allContainer = view.findViewById(R.id.layoutAllBuildings)
         btnAddBuilding = view.findViewById(R.id.btnAddBuilding)
 
-        // 툴바 뒤로가기
-        toolbar.setNavigationOnClickListener {
-            requireActivity().onBackPressedDispatcher.onBackPressed()
-        }
+        toolbar.setNavigationOnClickListener { requireActivity().onBackPressedDispatcher.onBackPressed() }
 
-        setupMockData()
-        renderFavorites()
-        renderAllBuildings()
+        loadDataFromFirestore() // Replace mock data with Firestore data
 
         btnAddBuilding.setOnClickListener {
             showAddBuildingDialog()
@@ -49,28 +50,30 @@ class ManageFavoritesFragment : Fragment() {
         return view
     }
 
-    private fun setupMockData() {
-        allBuildings.clear()
-        allBuildings.addAll(
-            listOf(
-                Building("다산관", 15),
-                Building("창학관", 12),
-                Building("미래관", 10),
-                Building("예지관", 8),
-                Building("상상관", 14),
-                Building("인문관", 9),
-                Building("제1학생회관", 6),
-                Building("제2학생회관", 5)
-            )
-        )
+    private fun loadDataFromFirestore() {
+        if (userId == null) return
 
-        favoriteBuildings.clear()
-        favoriteBuildings.addAll(
-            listOf(
-                allBuildings[0], // 다산관
-                allBuildings[1]  // 창학관
-            )
-        )
+        val userRef = db.collection("users").document(userId)
+        val buildingsRef = db.collection("buildings")
+
+        buildingsRef.get().addOnSuccessListener { buildingsSnapshot ->
+            allBuildings.clear()
+            val buildings = buildingsSnapshot.toObjects(Building::class.java)
+            allBuildings.addAll(buildings.mapIndexed { index, building -> building.apply { id = buildingsSnapshot.documents[index].id } })
+            allBuildings.sortBy { it.name }
+
+            userRef.get().addOnSuccessListener { userDoc ->
+                val favoriteBuildingIds = userDoc.get("favorites") as? List<String> ?: emptyList()
+                
+                favoriteBuildings.clear()
+                favoriteBuildings.addAll(allBuildings.filter { favoriteBuildingIds.contains(it.id) })
+
+                renderFavorites()
+                renderAllBuildings()
+            }
+        }.addOnFailureListener {
+            Toast.makeText(requireContext(), "Failed to load buildings", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun renderFavorites() {
@@ -88,18 +91,10 @@ class ManageFavoritesFragment : Fragment() {
         }
 
         favoriteBuildings.forEach { building ->
-            val itemView = inflater.inflate(
-                R.layout.item_favorite_building,
-                favoriteContainer,
-                false
-            )
-
-            val tvName = itemView.findViewById<TextView>(R.id.tvFavoriteName)
-            val tvRooms = itemView.findViewById<TextView>(R.id.tvFavoriteRooms)
-
-            tvName.text = building.name
-            tvRooms.text = "${building.roomCount}개 강의실"
-
+            val itemView = inflater.inflate(R.layout.item_favorite_building, favoriteContainer, false)
+            itemView.findViewById<TextView>(R.id.tvFavoriteName).text = building.name
+            itemView.findViewById<TextView>(R.id.tvFavoriteRooms).text = "${building.roomCount}개 강의실"
+            // You might need an 'X' or 'remove' button here to remove a favorite
             favoriteContainer.addView(itemView)
         }
     }
@@ -109,25 +104,13 @@ class ManageFavoritesFragment : Fragment() {
         val inflater = LayoutInflater.from(requireContext())
 
         allBuildings.forEach { building ->
-            val itemView = inflater.inflate(
-                R.layout.item_all_building,
-                allContainer,
-                false
-            )
+            val itemView = inflater.inflate(R.layout.item_all_building, allContainer, false)
 
-            val tvName = itemView.findViewById<TextView>(R.id.tvAllName)
-            val tvRooms = itemView.findViewById<TextView>(R.id.tvAllRooms)
+            itemView.findViewById<TextView>(R.id.tvAllName).text = building.name
+            itemView.findViewById<TextView>(R.id.tvAllRooms).text = "${building.roomCount}개 강의실"
+
             val tvStar = itemView.findViewById<TextView>(R.id.tvAllStar)
-
-            tvName.text = building.name
-            tvRooms.text = "${building.roomCount}개 강의실"
-
-            // 즐겨찾기 여부에 따라 별 표시
-            if (favoriteBuildings.any { it.name == building.name }) {
-                tvStar.visibility = View.VISIBLE
-            } else {
-                tvStar.visibility = View.INVISIBLE
-            }
+            tvStar.visibility = if (favoriteBuildings.any { it.id == building.id }) View.VISIBLE else View.INVISIBLE
 
             allContainer.addView(itemView)
         }
@@ -136,17 +119,13 @@ class ManageFavoritesFragment : Fragment() {
     private fun showAddBuildingDialog() {
         val dialog = AddBuildingDialogFragment()
 
-        // 현재 즐겨찾기 아닌 건물만 전달
-        val candidates = allBuildings.filter { b ->
-            favoriteBuildings.none { it.name == b.name }
-        }
+        val candidates = allBuildings.filter { b -> favoriteBuildings.none { it.id == b.id } }
 
         dialog.setCandidateBuildings(candidates)
         dialog.onBuildingSelected = { selected ->
-            if (favoriteBuildings.none { it.name == selected.name }) {
-                favoriteBuildings.add(selected)
-                renderFavorites()
-                renderAllBuildings()
+            if (userId != null) {
+                db.collection("users").document(userId).update("favorites", FieldValue.arrayUnion(selected.id))
+                    .addOnSuccessListener { loadDataFromFirestore() } // Reload on success
             }
         }
 

@@ -9,6 +9,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.example.lendmark.R
+import com.example.lendmark.data.model.Building // Correct import
 
 class AddBuildingDialogFragment : DialogFragment() {
 
@@ -16,13 +17,13 @@ class AddBuildingDialogFragment : DialogFragment() {
 
     private val candidateBuildings = mutableListOf<Building>()
 
-    fun setCandidateBuildings(buildings: List<Building>) {
+    fun setCandidateBuildings(buildings: List<Building>) { // Type is now correct
         candidateBuildings.clear()
         candidateBuildings.addAll(buildings)
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val builder = AlertDialog.Builder(requireContext())  //, R.style.AlertDialogTheme
+        val builder = AlertDialog.Builder(requireContext())
         val inflater = LayoutInflater.from(requireContext())
         val view = inflater.inflate(R.layout.dialog_add_building, null)
 
@@ -40,7 +41,7 @@ class AddBuildingDialogFragment : DialogFragment() {
             val btnAdd = itemView.findViewById<ImageButton>(R.id.btnAdd)
 
             tvName.text = building.name
-            tvRooms.text = "${building.roomCount}개 강의실"
+            tvRooms.text = "${building.roomCount} rooms"
 
             btnAdd.setOnClickListener {
                 onBuildingSelected?.invoke(building)
