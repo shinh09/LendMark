@@ -70,7 +70,7 @@
                 android:textColor="#364153" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- 📧 School Email -->
+        <!-- School Email -->
         <TextView
             android:id="@+id/tvEmailLabel"
             android:layout_width="wrap_content"

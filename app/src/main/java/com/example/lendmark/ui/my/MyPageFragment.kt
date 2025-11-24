@@ -2,6 +2,7 @@ package com.example.lendmark.ui.my
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -13,11 +14,13 @@ import com.example.lendmark.ui.auth.AuthActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 
 class MyPageFragment : Fragment() {
     private var _binding: FragmentMyPageBinding? = null
     private val binding get() = _binding!!
     private val auth = FirebaseAuth.getInstance()
+    private val db = FirebaseFirestore.getInstance()
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -34,8 +37,11 @@ class MyPageFragment : Fragment() {
         val toggleGroup =
             view.findViewById<MaterialButtonToggleGroup>(R.id.my_toggle_group)
         val btnInfo = view.findViewById<MaterialButton>(R.id.btn_my_info)
-        val btnReservation = view.findViewById<MaterialButton>(R.id.btn_my_reservation)
-        val btnFavorite = view.findViewById<MaterialButton>(R.id.btn_my_favorite)
+
+        // Set listener for the Edit Profile button
+        binding.btnEditProfile.setOnClickListener {
+            loadMajorsAndShowDialog()
+        }
 
         // 기본: 내 정보 탭
         if (savedInstanceState == null) {
@@ -73,5 +79,22 @@ class MyPageFragment : Fragment() {
             requireActivity().finish()  // 현재 액티비티 종료 (MainActivity 닫기)
         }
 
+    }
+
+    private fun loadMajorsAndShowDialog() {
+        db.collection("timetables")
+            .document("2025-fall")
+            .collection("departments")
+            .get()
+            .addOnSuccessListener { result ->
+                val majorsList = result.documents.mapNotNull { it.getString("department") }
+                if (isAdded) { // Ensure fragment is still attached
+                    EditProfileDialog(majorsList).show(childFragmentManager, "EditProfileDialog")
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e("MyPageFragment", "Failed to load majors", e)
+                Toast.makeText(requireContext(), "Failed to load majors list.", Toast.LENGTH_SHORT).show()
+            }
     }
 }

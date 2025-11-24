@@ -49,20 +49,18 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-functions")
-
-
+    
+    implementation("de.hdodenhof:circleimageview:3.1.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
+    implementation("androidx.gridlayout:gridlayout:1.0.0") // Added for GridLayout
 
     implementation("com.github.bumptech.glide:glide:4.16.0")
-    implementation(libs.androidx.gridlayout)
     annotationProcessor("com.github.bumptech.glide:compiler:4.16.0")
-
-
 
     // Navigation component
     implementation("androidx.navigation:navigation-fragment-ktx:2.7.7")
@@ -77,4 +75,3 @@ dependencies {
     // 최신 버전
     implementation("com.google.android.gms:play-services-location:21.3.0")
 }
-
