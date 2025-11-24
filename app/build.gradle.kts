@@ -74,4 +74,5 @@ dependencies {
     implementation("com.kakao.maps.open:android:2.13.0")
     // 최신 버전
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("com.google.firebase:firebase-storage:20.3.0")
 }

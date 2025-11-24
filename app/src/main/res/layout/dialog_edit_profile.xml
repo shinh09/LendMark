@@ -38,7 +38,7 @@
                 android:id="@+id/ivProfileImage"
                 android:layout_width="96dp"
                 android:layout_height="96dp"
-                android:src="@color/gray"
+                android:src="@color/gray_light"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintStart_toStartOf="parent"/>
 
