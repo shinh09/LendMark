@@ -83,12 +83,18 @@ class ReservationMapFragment : Fragment() {
                                 putString("buildingName", building.name)
                             }
 
+                            val fragment = RoomListFragment().apply {
+                                arguments = bundle
+                            }
+
                             (requireActivity() as MainActivity).replaceFragment(
-                                RoomListFragment().apply { arguments = bundle }
+                                fragment,
+                                building.name   // ← MainActivity 상단 타이틀용
                             )
                             return true
                         }
                     })
+
 
                     // Firestore → 건물 목록 불러와서 마커 찍기
                     loadBuildingsAndAddMarkers()
