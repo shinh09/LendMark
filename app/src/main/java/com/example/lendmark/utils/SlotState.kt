@@ -4,5 +4,6 @@ enum class SlotState {
     EMPTY,
     CLASS,
     RESERVED,
-    SELECTED
+    SELECTED,
+    DISABLED
 }

@@ -46,6 +46,13 @@ class TimetableAdapter(
                 holder.tvSlot.text = "SELECT"
                 holder.tvSlot.setBackgroundColor(Color.parseColor("#D1C4E9"))
             }
+
+            SlotState.DISABLED -> {
+                holder.tvSlot.text = ""
+                holder.tvSlot.setBackgroundColor(Color.parseColor("#E0E0E0")) // 밝은 회색
+                holder.tvSlot.isClickable = false
+                holder.tvSlot.isEnabled = false
+            }
         }
     }
 
