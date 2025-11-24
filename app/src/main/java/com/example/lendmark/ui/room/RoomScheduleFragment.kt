@@ -27,6 +27,10 @@ import android.widget.Button
 import android.widget.Spinner
 import android.widget.ArrayAdapter
 import com.google.firebase.auth.FirebaseAuth
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class RoomScheduleFragment : Fragment() {
 
@@ -38,6 +42,10 @@ class RoomScheduleFragment : Fragment() {
     private lateinit var buildingId: String
     private lateinit var roomId: String
     private lateinit var buildingName: String
+
+    private var weekOffset = 0  // 0 = 이번주, -1 지난주, +1 다음주
+    private val weekDates = mutableListOf<Date>()
+
 
     // 시간표 구조 (08:00~17:00 → 총 10칸)
     private val periodLabels = listOf(
@@ -73,24 +81,109 @@ class RoomScheduleFragment : Fragment() {
 
         binding.tvRoomTitle.text = "$buildingName ${roomId}호"
 
+        // 주 정보 계산 + UI 세팅
+        calculateWeekDates()
+        updateWeekUI()
+        updateWeekButtons()
+
+        //표 생성 + 수업 불러오기
         createGridTable()
         loadTimetable()
 
-        // 그리드 생성 후 예약 불러오기
+        //예약 표시 (Grid 생성 후 해야 함)
         Handler(Looper.getMainLooper()).post {
             loadExistingReservations()
         }
 
         updateSelectionInfo()
 
+        // 이전주 버튼
+        binding.btnPrevWeek.setOnClickListener {
+            weekOffset--
+            refreshWeek()
+        }
+
+        //  다음주 버튼
+        binding.btnNextWeek.setOnClickListener {
+            weekOffset++
+            refreshWeek()
+        }
+
+        //  예약하기 버튼
         binding.btnReserve.setOnClickListener {
             openReservationDialog()
         }
     }
 
+
     // ============================================================
     // 1) GridLayout 표 구성
     // ============================================================
+
+
+    //날짜 계산
+    private fun calculateWeekDates() {
+        weekDates.clear()
+
+        val calendar = Calendar.getInstance()
+        calendar.firstDayOfWeek = Calendar.MONDAY
+        calendar.time = Date()
+
+        // 오늘 기준 이번주 월요일 찾기
+        val todayDow = calendar.get(Calendar.DAY_OF_WEEK)
+        val diff = (todayDow + 6) % 7
+        calendar.add(Calendar.DATE, -diff)
+
+        // 주 오프셋 적용
+        calendar.add(Calendar.DATE, 7 * weekOffset)
+
+        // 월~금 날짜 생성
+        for (i in 0..4) {
+            weekDates.add(calendar.time)
+            calendar.add(Calendar.DATE, 1)
+        }
+    }
+
+    private fun updateWeekUI() {
+        if (weekDates.isEmpty()) return
+
+        val sdf = SimpleDateFormat("MM.dd", Locale.KOREA)
+
+        val start = sdf.format(weekDates.first())
+        val end = sdf.format(weekDates.last())
+
+        binding.tvWeekRange.text = "$start - $end"
+    }
+
+    private fun refreshWeek() {
+        calculateWeekDates()
+        updateWeekUI()
+        updateWeekButtons()
+
+        createGridTable()       // 시간표 다시 만들기
+        loadTimetable()         // 강의 정보 다시 표시
+        loadExistingReservations() // 예약 다시 표시
+    }
+
+    private fun updateWeekButtons() {
+        when (weekOffset) {
+            0 -> { // 이번주
+                binding.btnPrevWeek.visibility = View.INVISIBLE
+                binding.btnNextWeek.visibility = View.VISIBLE
+            }
+            1 -> { // 다음주
+                binding.btnPrevWeek.visibility = View.VISIBLE
+                binding.btnNextWeek.visibility = View.INVISIBLE
+            }
+            else -> { // 나머지 주
+                binding.btnPrevWeek.visibility = View.VISIBLE
+                binding.btnNextWeek.visibility = View.VISIBLE
+            }
+        }
+    }
+
+
+
 
     private fun createGridTable() {
         val grid = binding.gridSchedule
@@ -100,7 +193,9 @@ class RoomScheduleFragment : Fragment() {
         // ---------- 헤더 ----------
         addHeaderCell(0, 0, "시간")
         for (i in dayLabels.indices) {
-            addHeaderCell(0, i + 1, dayLabels[i])
+            val dateText = SimpleDateFormat("MM/dd", Locale.KOREA).format(weekDates[i])
+            addHeaderCell(0, i + 1, dayLabels[i] + "\n" + dateText)
+
         }
 
         // ---------- 내용 ----------
