@@ -3,6 +3,7 @@ package com.example.lendmark.ui.main
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import android.widget.ImageButton
 import android.widget.TextView
 import com.example.lendmark.R
@@ -30,64 +31,89 @@ class MainActivity : AppCompatActivity() {
         tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
         bottomNav = findViewById(R.id.bottomNav)
 
+        supportFragmentManager.addOnBackStackChangedListener {
+            updateUiAfterNavigation()
+        }
+
         if (savedInstanceState == null) {
-            replaceFragment(HomeFragment(), "LendMark", isHome = true)
+            // Home fragment is the base, don't add to back stack
+            replaceFragment(HomeFragment(), "LendMark", addToBackStack = false)
         }
 
         bottomNav.setOnItemSelectedListener { item ->
-            // Do not reselect the same item
-            if (bottomNav.selectedItemId == item.itemId && supportFragmentManager.findFragmentById(R.id.main_container) !is ManageFavoritesFragment) {
-                return@setOnItemSelectedListener false
+            // Don't do anything if the selected tab is already active at the root level.
+            val currentFragment = supportFragmentManager.findFragmentById(R.id.main_container)
+            if (supportFragmentManager.backStackEntryCount == 0) {
+                 val isSameTab = when(item.itemId) {
+                    R.id.nav_home -> currentFragment is HomeFragment
+                    R.id.nav_book -> currentFragment is BuildingListFragment
+                    R.id.nav_map -> currentFragment is ReservationMapFragment
+                    R.id.nav_my -> currentFragment is MyPageFragment
+                    else -> false
+                }
+                if (isSameTab) return@setOnItemSelectedListener false
             }
+            
+            // When switching to a new tab, clear the entire back stack.
+            supportFragmentManager.popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE)
 
-            when (item.itemId) {
-                R.id.nav_home -> {
-                    replaceFragment(HomeFragment(), "LendMark", isHome = true)
-                    true
-                }
-                R.id.nav_book -> {
-                    replaceFragment(BuildingListFragment(), "Classroom Reservation")
-                    true
-                }
-                R.id.nav_map -> {
-                    replaceFragment(ReservationMapFragment(), "Map View")
-                    true
-                }
-                R.id.nav_my -> {
-                    replaceFragment(MyPageFragment(), "My Page")
-                    true
-                }
-                else -> false
+            val (fragment, title) = when (item.itemId) {
+                R.id.nav_home -> HomeFragment() to "LendMark"
+                R.id.nav_book -> BuildingListFragment() to "Classroom Reservation"
+                R.id.nav_map -> ReservationMapFragment() to "Map View"
+                R.id.nav_my -> MyPageFragment() to "My Page"
+                else -> return@setOnItemSelectedListener false
             }
+            // Root fragments of tabs are not added to the back stack.
+            replaceFragment(fragment, title, addToBackStack = false)
+            true
         }
 
         btnNotification.setOnClickListener {
             replaceFragment(NotificationListFragment(), "Notifications")
         }
-
-        // The default behaviour of the menu button is handled in replaceFragment
     }
 
-    fun replaceFragment(fragment: Fragment, title: String, isHome: Boolean = false) {
+    fun replaceFragment(fragment: Fragment, title: String, addToBackStack: Boolean = true) {
         val transaction = supportFragmentManager.beginTransaction()
             .replace(R.id.main_container, fragment)
-        
-        // Add to back stack only if it's not the home fragment being added initially
-        if (!isHome || supportFragmentManager.backStackEntryCount > 0) {
-             transaction.addToBackStack(title)
+
+        if (addToBackStack) {
+            transaction.addToBackStack(title) // Use title as the name for the entry
         }
 
         transaction.commit()
-        tvHeaderTitle.text = title
-        
-        if (isHome) {
-            btnMenu.setImageResource(R.drawable.ic_menu)
-            btnMenu.setOnClickListener {
-                // TODO: Drawer menu connection (future implementation)
-            }
-        } else {
+    }
+
+    private fun updateUiAfterNavigation() {
+        val isSubPage = supportFragmentManager.backStackEntryCount > 0
+        val currentFragment = supportFragmentManager.findFragmentById(R.id.main_container)
+
+        if (isSubPage) {
             btnMenu.setImageResource(R.drawable.ic_arrow_back)
             btnMenu.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+            tvHeaderTitle.text = supportFragmentManager.getBackStackEntryAt(supportFragmentManager.backStackEntryCount - 1).name
+        } else {
+            btnMenu.setImageResource(R.drawable.ic_menu)
+            btnMenu.setOnClickListener { /* TODO: Drawer menu */ }
+            tvHeaderTitle.text = when (currentFragment) {
+                is BuildingListFragment -> "Classroom Reservation"
+                is ReservationMapFragment -> "Map View"
+                is MyPageFragment -> "My Page"
+                else -> "LendMark"
+            }
+        }
+        
+        // Sync bottom nav with the current root fragment
+        val selectedItem = when (currentFragment) {
+            is HomeFragment -> R.id.nav_home
+            is BuildingListFragment -> R.id.nav_book
+            is ReservationMapFragment -> R.id.nav_map
+            is MyPageFragment -> R.id.nav_my
+            else -> bottomNav.selectedItemId // Keep current selection for sub-pages
+        }
+        if (bottomNav.selectedItemId != selectedItem) {
+            bottomNav.selectedItemId = selectedItem
         }
     }
 
@@ -96,24 +122,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
-        if (supportFragmentManager.backStackEntryCount > 1) {
-            super.onBackPressed()
-            // After popping, update header to match the new top of the stack
-            val newTitle = supportFragmentManager.getBackStackEntryAt(supportFragmentManager.backStackEntryCount - 2).name
-            val currentFragment = supportFragmentManager.findFragmentById(R.id.main_container)
-            tvHeaderTitle.text = newTitle
-
-            // Special handling for My Page navigation
-            if (currentFragment is MyPageFragment) {
-                 bottomNav.selectedItemId = R.id.nav_my
-                 btnMenu.setImageResource(R.drawable.ic_menu) // Revert to hamburger on MyPage
-            } else if (currentFragment is HomeFragment) {
-                 bottomNav.selectedItemId = R.id.nav_home
-                 btnMenu.setImageResource(R.drawable.ic_menu)
-            }
-
+        val currentFragment = supportFragmentManager.findFragmentById(R.id.main_container)
+        
+        if (supportFragmentManager.backStackEntryCount > 0) {
+            super.onBackPressedDispatcher.onBackPressed()
+        } else if (currentFragment !is HomeFragment) {
+            bottomNav.selectedItemId = R.id.nav_home
         } else {
-            finish() // Exit the app if only one entry is on the back stack
+            super.onBackPressedDispatcher.onBackPressed()
         }
     }
 }
