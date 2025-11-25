@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="80dp"
+    android:height="80dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Outer Circle -->
+    <path
+        android:fillColor="#E8E7EE"
+        android:pathData="M12,2
+                          A10,10 0 1 1 12,22
+                          A10,10 0 1 1 12,2z" />
+
+    <!-- Clock Border -->
+    <path
+        android:fillColor="#190848"
+        android:pathData="M12,4
+                          A8,8 0 1 1 12,20
+                          A8,8 0 1 1 12,4z" />
+
+    <!-- Clock Hands -->
+    <path
+        android:strokeColor="#190848"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M12,8 L12,12 L15,13" />
+</vector>
