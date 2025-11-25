@@ -1,5 +1,6 @@
 package com.example.lendmark.ui.room
 
+import android.R.attr.data
 import android.app.AlertDialog
 import android.graphics.Color
 import android.os.Bundle
@@ -10,8 +11,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
-import android.widget.TextView
+import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.EditText
+import android.widget.Spinner
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.view.setPadding
@@ -20,32 +24,39 @@ import androidx.gridlayout.widget.GridLayout
 import com.example.lendmark.R
 import com.example.lendmark.databinding.FragmentRoomScheduleBinding
 import com.example.lendmark.utils.SlotState
-import com.google.firebase.firestore.FirebaseFirestore
-import kotlin.math.min
-import kotlin.math.max
-import android.widget.Button
-import android.widget.Spinner
-import android.widget.ArrayAdapter
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.max
+import kotlin.math.min
 
 class RoomScheduleFragment : Fragment() {
+
+    companion object {
+        // -1주까지는 보기만, 0~4주까지 예약 가능
+        private const val MIN_WEEK_OFFSET = -1
+        private const val MAX_WEEK_OFFSET = 4
+    }
 
     private var _binding: FragmentRoomScheduleBinding? = null
     private val binding get() = _binding!!
 
     private val db = FirebaseFirestore.getInstance()
 
+
+    private val uid: String?
+        get() = FirebaseAuth.getInstance().currentUser?.uid
+
     private lateinit var buildingId: String
     private lateinit var roomId: String
     private lateinit var buildingName: String
 
-    private var weekOffset = 0  // 0 = 이번주, -1 지난주, +1 다음주
-    private val weekDates = mutableListOf<Date>()
-
+    // 0 = 이번주, -1 = 지난주, +1 = 다음주 ...
+    private var weekOffset = 0
+    private val weekDates = mutableListOf<Date>()  // 월~금 실제 날짜
 
     // 시간표 구조 (08:00~17:00 → 총 10칸)
     private val periodLabels = listOf(
@@ -74,6 +85,11 @@ class RoomScheduleFragment : Fragment() {
         return binding.root
     }
 
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         buildingId = arguments?.getString("buildingId") ?: ""
         roomId = arguments?.getString("roomId") ?: ""
@@ -86,58 +102,55 @@ class RoomScheduleFragment : Fragment() {
         updateWeekUI()
         updateWeekButtons()
 
-        //표 생성 + 수업 불러오기
+        // 표 생성 + 수업/예약 로드
         createGridTable()
         loadTimetable()
 
-        //예약 표시 (Grid 생성 후 해야 함)
         Handler(Looper.getMainLooper()).post {
             loadExistingReservations()
         }
 
         updateSelectionInfo()
 
-        // 이전주 버튼
+        // 이전 주
         binding.btnPrevWeek.setOnClickListener {
-            weekOffset--
-            refreshWeek()
+            if (weekOffset > MIN_WEEK_OFFSET) {
+                weekOffset--
+                refreshWeek()
+            }
         }
 
-        //  다음주 버튼
+        // 다음 주
         binding.btnNextWeek.setOnClickListener {
-            weekOffset++
-            refreshWeek()
+            if (weekOffset < MAX_WEEK_OFFSET) {
+                weekOffset++
+                refreshWeek()
+            }
         }
 
-        //  예약하기 버튼
+        // 예약 버튼
         binding.btnReserve.setOnClickListener {
             openReservationDialog()
         }
     }
 
-
     // ============================================================
-    // 1) GridLayout 표 구성
+    // 1) 주간 날짜 계산 & UI
     // ============================================================
 
-
-    //날짜 계산
+    // 이번 주 기준, weekOffset 적용해서 월~금 실제 날짜 계산
     private fun calculateWeekDates() {
         weekDates.clear()
 
         val calendar = Calendar.getInstance()
-        calendar.firstDayOfWeek = Calendar.MONDAY
         calendar.time = Date()
 
-        // 오늘 기준 이번주 월요일 찾기
-        val todayDow = calendar.get(Calendar.DAY_OF_WEEK)
-        val diff = (todayDow + 6) % 7
-        calendar.add(Calendar.DATE, -diff)
+        // 이번 주 월요일 정확히 세팅
+        calendar.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
 
-        // 주 오프셋 적용
-        calendar.add(Calendar.DATE, 7 * weekOffset)
+        // weekOffset 적용
+        calendar.add(Calendar.WEEK_OF_YEAR, weekOffset)
 
-        // 월~금 날짜 생성
         for (i in 0..4) {
             weekDates.add(calendar.time)
             calendar.add(Calendar.DATE, 1)
@@ -148,71 +161,100 @@ class RoomScheduleFragment : Fragment() {
         if (weekDates.isEmpty()) return
 
         val sdf = SimpleDateFormat("MM.dd", Locale.KOREA)
-
         val start = sdf.format(weekDates.first())
         val end = sdf.format(weekDates.last())
-
         binding.tvWeekRange.text = "$start - $end"
     }
 
     private fun refreshWeek() {
+        selectedRange = null
+        updateSelectionInfo()
+
         calculateWeekDates()
         updateWeekUI()
         updateWeekButtons()
 
-        createGridTable()       // 시간표 다시 만들기
-        loadTimetable()         // 강의 정보 다시 표시
-        loadExistingReservations() // 예약 다시 표시
+        createGridTable()
+        loadTimetable()
+        loadExistingReservations()
     }
 
     private fun updateWeekButtons() {
-        when (weekOffset) {
-            0 -> { // 이번주
-                binding.btnPrevWeek.visibility = View.INVISIBLE
-                binding.btnNextWeek.visibility = View.VISIBLE
-            }
-            1 -> { // 다음주
-                binding.btnPrevWeek.visibility = View.VISIBLE
-                binding.btnNextWeek.visibility = View.INVISIBLE
-            }
-            else -> { // 나머지 주
-                binding.btnPrevWeek.visibility = View.VISIBLE
-                binding.btnNextWeek.visibility = View.VISIBLE
-            }
+        // 이번주(0)에는 이전주 버튼 숨김
+        binding.btnPrevWeek.visibility =
+            if (weekOffset == 0) View.INVISIBLE else View.VISIBLE
+
+        // 다음주 버튼은 "오늘 + 28일" 안넘는 경우에만 보이게
+        if (weekDates.isEmpty()) {
+            binding.btnNextWeek.visibility = View.INVISIBLE
+            return
         }
+
+        val lastDayOfWeek = weekDates.last()
+        val cal = Calendar.getInstance()
+        cal.time = Date()
+        cal.add(Calendar.DATE, 28)
+        val limit = cal.time
+
+        binding.btnNextWeek.visibility =
+            if (lastDayOfWeek.before(limit)) View.VISIBLE else View.INVISIBLE
     }
 
-
-
+    // ============================================================
+    // 2) GridLayout 표 구성 (헤더 + 칸)
+    // ============================================================
 
     private fun createGridTable() {
         val grid = binding.gridSchedule
         grid.removeAllViews()
-        grid.columnCount = 6    // 시간 + 월~금
+        grid.columnCount = 6 // 시간 + 월~금
+
+        cellViews.clear()
+        cellState.clear()
 
         // ---------- 헤더 ----------
         addHeaderCell(0, 0, "시간")
-        for (i in dayLabels.indices) {
-            val dateText = SimpleDateFormat("MM/dd", Locale.KOREA).format(weekDates[i])
-            addHeaderCell(0, i + 1, dayLabels[i] + "\n" + dateText)
 
+        val headerDateFormat = SimpleDateFormat("MM/dd", Locale.KOREA)
+        for (i in dayLabels.indices) {
+            val dateText = if (weekDates.size > i) {
+                headerDateFormat.format(weekDates[i])
+            } else {
+                ""
+            }
+            addHeaderCell(0, i + 1, dayLabels[i] + "\n" + dateText)
         }
 
         // ---------- 내용 ----------
         for (p in periods) {
-
             // 왼쪽 시간
             addTimeCell(p + 1, 0, periodLabels[p])
 
             // 월~금
             for (d in 0 until 5) {
-                val tv = addEmptyCell(p + 1, d + 1)
+                val date = weekDates[d]
+                val reservableDate = isDateReservable(d)
+                val reservableTime = !isPastTimeSlot(date, p)
+
+                val isReservable = reservableDate && reservableTime
+
+                val state = if (isReservable) {
+                    SlotState.EMPTY
+                } else {
+                    SlotState.DISABLED
+                }
+
+                val tv = addEmptyCell(p + 1, d + 1, state)
 
                 val key = d to p
-                cellState[key] = SlotState.EMPTY
+                cellState[key] = state
                 cellViews[key] = tv
 
-                tv.setOnClickListener { onCellClicked(d, p) }
+                if (state == SlotState.EMPTY) {
+                    tv.setOnClickListener { onCellClicked(d, p) }
+                } else {
+                    tv.isClickable = false
+                }
             }
         }
     }
@@ -223,7 +265,7 @@ class RoomScheduleFragment : Fragment() {
         val tv = TextView(requireContext()).apply {
             val params = GridLayout.LayoutParams().apply {
                 width = 0
-                height = dp(45)
+                height = dp(60)  // 행 높이와 맞춤
                 rowSpec = GridLayout.spec(row)
                 columnSpec = GridLayout.spec(col, 1f)
                 setMargins(1, 1, 1, 1)
@@ -250,38 +292,142 @@ class RoomScheduleFragment : Fragment() {
         binding.gridSchedule.addView(tv, gridParam(row, col, 1))
     }
 
-    private fun addEmptyCell(row: Int, col: Int): TextView {
+    private fun addEmptyCell(row: Int, col: Int, state: SlotState): TextView {
         val tv = TextView(requireContext()).apply {
             gravity = Gravity.CENTER
             textSize = 11f
-            background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_cell_empty)
+
+            when (state) {
+                SlotState.EMPTY -> {
+                    background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_empty
+                    )
+                    setTextColor(Color.BLACK)
+                    isClickable = true
+                }
+                SlotState.DISABLED -> {
+                    background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_disabled
+                    )
+                    setTextColor(Color.parseColor("#888888"))
+                    isClickable = false
+                }
+                else -> {
+                    // 기본은 EMPTY와 동일하게, 나중에 state로 다시 덮어씀
+                    background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_empty
+                    )
+                    setTextColor(Color.BLACK)
+                }
+            }
         }
+
         binding.gridSchedule.addView(tv, gridParam(row, col, 1))
         return tv
     }
 
     // rowSpan 적용 가능
     private fun gridParam(row: Int, col: Int, rowSpan: Int): GridLayout.LayoutParams {
-        var rowSpec = GridLayout.spec(row, rowSpan)
+        val rowSpec = GridLayout.spec(row, rowSpan)
         val colSpec = GridLayout.spec(col, 1)
         return GridLayout.LayoutParams(rowSpec, colSpec).apply {
             width = 0
             height = dp(60)
             columnSpec = colSpec
-            rowSpec = rowSpec
+            this.rowSpec = rowSpec
             setGravity(Gravity.FILL)
+            setMargins(1, 1, 1, 1)   // 헤더와 동일한 테두리 간격
         }
     }
 
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
     // ============================================================
-    // 2) 수업(강의) 블록 배치 (rowSpan으로 병합)
+    //  날짜 관련 유틸
+    // ============================================================
+
+    private fun getDateString(date: Date): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+        return sdf.format(date)
+    }
+
+    private fun isDateAfterLimit(date: Date): Boolean {
+        val cal = Calendar.getInstance()
+        cal.time = Date()
+        cal.add(Calendar.DATE, 28)  // 4주 = 28일
+        val limit = cal.time
+        return date.after(limit)
+    }
+
+    // 오늘 날짜의 이미 지난 시간 칸인지
+    private fun isPastTimeSlot(date: Date, periodIndex: Int): Boolean {
+        val now = Calendar.getInstance()
+
+        val target = Calendar.getInstance().apply {
+            time = date
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        // 날짜가 오늘이 아니면 "지나간 시간" 개념 없음
+        if (target.get(Calendar.YEAR) != now.get(Calendar.YEAR) ||
+            target.get(Calendar.DAY_OF_YEAR) != now.get(Calendar.DAY_OF_YEAR)
+        ) {
+            return false
+        }
+
+        // 08:00 + periodIndex 기준
+        val hour = 8 + periodIndex
+        val endHour = hour + 1
+
+        val nowHour = now.get(Calendar.HOUR_OF_DAY)
+        val nowMinute = now.get(Calendar.MINUTE)
+
+        return nowHour > endHour || (nowHour == endHour && nowMinute > 0)
+    }
+
+    // 해당 dayIndex(0~4)가 예약 가능한 날짜인지
+    private fun isDateReservable(dayIndex: Int): Boolean {
+        if (dayIndex !in 0 until weekDates.size) return false
+
+        val target = Calendar.getInstance().apply {
+            time = weekDates[dayIndex]
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        val todayCal = Calendar.getInstance().apply {
+            time = Date()
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        // 과거 날짜는 예약 불가
+        if (target.before(todayCal)) return false
+
+        // 4주 이후 날짜는 예약 불가
+        if (isDateAfterLimit(target.time)) return false
+
+        // 주 단위 제한 (0~4주만)
+        return weekOffset in 0..MAX_WEEK_OFFSET
+    }
+
+    // ============================================================
+    // 3) 수업(강의) 블록 배치 (rowSpan으로 병합)
     // ============================================================
 
     private fun loadTimetable() {
         db.collection("buildings").document(buildingId)
             .get()
             .addOnSuccessListener { doc ->
-
                 val roomData =
                     (doc.get("timetable") as? Map<String, Any>)
                         ?.get(roomId) as? Map<String, Any> ?: return@addOnSuccessListener
@@ -294,11 +440,17 @@ class RoomScheduleFragment : Fragment() {
                     val dayIndex = dayKeys.indexOf(dayKey)
                     if (dayIndex == -1) return@forEach
 
+                    // 지난 날짜/4주 이후 날짜엔 수업 표시 안 함
+                    if (!isDateReservable(dayIndex)) return@forEach
+
                     val start = (item["periodStart"] as Long).toInt()
                     val end = (item["periodEnd"] as Long).toInt()
                     val subject = item["subject"] as? String ?: ""
 
-                    // 기존 칸 제거 후 병합 셀 추가
+                    // 오늘 날짜라면 이미 지난 시간대 수업은 안보이게
+                    val date = weekDates[dayIndex]
+                    if (isPastTimeSlot(date, start)) return@forEach
+
                     mergeClassBlock(dayIndex, start, end, subject)
                 }
             }
@@ -329,18 +481,25 @@ class RoomScheduleFragment : Fragment() {
     }
 
     // ============================================================
-    // 3) 셀 선택 로직
+    // 4) 셀 선택 로직
     // ============================================================
 
     private fun onCellClicked(day: Int, p: Int) {
+        // 오늘 날짜의 이미 지난 시간 → 선택 불가
+        if (isPastTimeSlot(weekDates[day], p)) return
 
-        // 이미 예약된 칸은 클릭 불가
-        if (cellState[day to p] == SlotState.CLASS ||
-            cellState[day to p] == SlotState.RESERVED) return
+        // 날짜가 예약 불가면 선택 불가
+        if (!isDateReservable(day)) return
+
+        // 수업/예약/비활성 칸은 선택 불가
+        when (cellState[day to p]) {
+            SlotState.CLASS, SlotState.RESERVED, SlotState.DISABLED -> return
+            else -> {}
+        }
 
         val range = selectedRange
 
-        // 기존에 선택된 것이 없으면 새로 선택
+        // 처음 선택
         if (range == null) {
             selectedRange = SelectedRange(day, p, p)
             applySelection()
@@ -348,14 +507,14 @@ class RoomScheduleFragment : Fragment() {
             return
         }
 
-        // 같은 칸을 다시 눌렀을 때 -> 선택 취소
+        // 같은 칸 다시 클릭 → 선택 취소
         if (range.day == day && range.start == p && range.end == p) {
             clearSelection()
             updateSelectionInfo()
             return
         }
 
-        // 다른 날이면 리셋 후 새로 선택
+        // 다른 요일 클릭 → 새로 선택
         if (range.day != day) {
             clearSelection()
             selectedRange = SelectedRange(day, p, p)
@@ -364,19 +523,20 @@ class RoomScheduleFragment : Fragment() {
             return
         }
 
-        // 연속 범위 확장
+        // 같은 요일 내 연속 확장
         if (p < range.start || p > range.end) {
-
-            // 중간에 수업이 껴있는지 검사
+            // 중간에 수업/예약 껴있으면 확장 불가
             for (i in min(range.start, p)..max(range.end, p)) {
                 if (cellState[day to i] == SlotState.CLASS ||
-                    cellState[day to i] == SlotState.RESERVED) return
+                    cellState[day to i] == SlotState.RESERVED ||
+                    cellState[day to i] == SlotState.DISABLED
+                ) return
             }
 
             range.start = min(range.start, p)
             range.end = max(range.end, p)
         } else {
-            // 눌렀는데 범위 안에 있음 → 단일 셀 취급하고 다시 선택
+            // 영역 안쪽 클릭 → 단일 셀로 재선택
             clearSelection()
             selectedRange = SelectedRange(day, p, p)
         }
@@ -385,14 +545,40 @@ class RoomScheduleFragment : Fragment() {
         updateSelectionInfo()
     }
 
-
     private fun clearSelection() {
         selectedRange = null
+
+        // 상태 기반으로 다시 그리기
         cellViews.forEach { (key, v) ->
-            val st = cellState[key]
-            // 수업/예약 칸은 건드리지 않음
-            if (st != SlotState.CLASS && st != SlotState.RESERVED) {
-                v.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_cell_empty)
+            when (cellState[key]) {
+                SlotState.CLASS -> {
+                    v.background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_class
+                    )
+                    v.setTextColor(Color.BLACK)
+                }
+                SlotState.RESERVED -> {
+                    v.background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_reserved
+                    )
+                    v.setTextColor(Color.BLACK)
+                }
+                SlotState.DISABLED -> {
+                    v.background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_disabled
+                    )
+                    v.setTextColor(Color.parseColor("#888888"))
+                }
+                else -> {
+                    v.background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_empty
+                    )
+                    v.setTextColor(Color.BLACK)
+                }
             }
         }
     }
@@ -400,31 +586,77 @@ class RoomScheduleFragment : Fragment() {
     private fun applySelection() {
         val range = selectedRange ?: return
 
-        // 먼저 선택 가능 칸들만 비우기
+        // 먼저 전체 셀을 상태에 맞게 다시 칠함 (선택 흔적 제거)
         cellViews.forEach { (key, v) ->
-            val st = cellState[key]
-            if (st != SlotState.CLASS && st != SlotState.RESERVED) {
-                v.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_cell_empty)
+            when (cellState[key]) {
+                SlotState.CLASS -> {
+                    v.background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_class
+                    )
+                    v.setTextColor(Color.BLACK)
+                }
+                SlotState.RESERVED -> {
+                    v.background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_reserved
+                    )
+                    v.setTextColor(Color.BLACK)
+                }
+                SlotState.DISABLED -> {
+                    v.background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_disabled
+                    )
+                    v.setTextColor(Color.parseColor("#888888"))
+                }
+                else -> {
+                    v.background = ContextCompat.getDrawable(
+                        requireContext(),
+                        R.drawable.bg_cell_empty
+                    )
+                    v.setTextColor(Color.BLACK)
+                }
             }
         }
 
-        // 선택 구간만 보라색으로
+        // 선택 영역만 보라색으로 표시 (예약 가능한 칸만)
         for (p in range.start..range.end) {
             val key = range.day to p
-            val st = cellState[key]
-            if (st == SlotState.EMPTY || st == SlotState.SELECTED) {
+            if (cellState[key] == SlotState.EMPTY) {
                 val v = cellViews[key] ?: continue
                 v.background = ContextCompat.getDrawable(
                     requireContext(),
                     R.drawable.bg_cell_selected
                 )
+                v.setTextColor(Color.BLACK)
             }
         }
     }
 
     // ============================================================
-    // 4) 선택 정보 표시
+    // 5) 선택 정보 표시
     // ============================================================
+
+    // 날짜 포맷 → "수요일 10:00 - 12:00" 중 날짜 부분 만드는 함수
+    private fun getFormattedDate(date: Date): String {
+        val cal = Calendar.getInstance().apply { time = date }
+        val dayOfWeek = when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> "월요일"
+            Calendar.TUESDAY -> "화요일"
+            Calendar.WEDNESDAY -> "수요일"
+            Calendar.THURSDAY -> "목요일"
+            Calendar.FRIDAY -> "금요일"
+            Calendar.SATURDAY -> "토요일"
+            else -> "일요일"
+        }
+
+        val sdf = SimpleDateFormat("MM월 dd일", Locale.KOREA)
+        val dayStr = sdf.format(date)
+
+        return "$dayStr ($dayOfWeek)"
+    }
+
 
     private fun updateSelectionInfo() {
         val range = selectedRange
@@ -435,27 +667,38 @@ class RoomScheduleFragment : Fragment() {
             return
         }
 
-        val dayKor = dayLabels[range.day] + "요일"
+        val date = weekDates.getOrNull(range.day)
+        if (date == null || !isDateReservable(range.day)) {
+            binding.tvSelectedInfo.text = "선택된 시간이 없습니다."
+            binding.tvSelectedDuration.text = ""
+            binding.btnReserve.isEnabled = false
+            return
+        }
+
+        val dateText = SimpleDateFormat("MM월 dd일", Locale.KOREA).format(date)
+        val dayKor = "${dayLabels[range.day]}요일"
         val startT = periodLabels[range.start]
         val endT = periodLabels[min(periodLabels.size - 1, range.end + 1)]
 
         val hours = range.end - range.start + 1
 
-        binding.tvSelectedInfo.text = "$dayKor $startT - $endT"
+        binding.tvSelectedInfo.text = "$dateText ($dayKor)\n$startT ~ $endT"
         binding.tvSelectedDuration.text = "${hours}시간 선택됨"
         binding.btnReserve.isEnabled = true
     }
 
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
-
     // ============================================================
-    // 5) 예약 다이얼로그
+    // 6) 예약 다이얼로그
     // ============================================================
 
     private fun openReservationDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.reservation_dialog, null)
+        val range = selectedRange
+        if (range == null || !isDateReservable(range.day)) {
+            Toast.makeText(requireContext(), "예약할 시간을 먼저 선택해주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
 
+        val dialogView = layoutInflater.inflate(R.layout.reservation_dialog, null)
         val dialog = AlertDialog.Builder(requireContext())
             .setView(dialogView)
             .create()
@@ -467,85 +710,149 @@ class RoomScheduleFragment : Fragment() {
         val spPurpose = dialogView.findViewById<Spinner>(R.id.spPurpose)
         val etPeople = dialogView.findViewById<EditText>(R.id.etPeople)
         val etPurposeCustom = dialogView.findViewById<EditText>(R.id.etPurposeCustom)
-        val btnSubmit = dialogView.findViewById<Button>(R.id.btnSubmit)
+        val btnNext = dialogView.findViewById<Button>(R.id.btnSubmit)
         val btnCancel = dialogView.findViewById<Button>(R.id.btnCancel)
 
-        // 현재 로그인한 사용자 정보 불러오기
+        // 로그인된 사용자 정보 자동 채우기
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid != null) {
             db.collection("users").document(uid).get()
-                .addOnSuccessListener { document ->
-                    if (document != null) {
-                        val name = document.getString("name") ?: ""
-                        val major = document.getString("department") ?: ""
-                        etUserName.setText(name)
-                        etMajor.setText(major)
-                    }
+                .addOnSuccessListener { doc ->
+                    etUserName.setText(doc.getString("name") ?: "")
+                    etMajor.setText(doc.getString("department") ?: "")
                 }
         }
 
-        // ----------- 목적 드롭다운 -----------
+        // 목적 드롭다운
         val items = listOf("스터디", "발표 준비", "미팅", "기타 (직접 입력)")
-        val adapter = ArrayAdapter(
-            requireContext(),
-            android.R.layout.simple_spinner_dropdown_item,
-            items
-        )
-        spPurpose.adapter = adapter
+        spPurpose.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, items)
 
         spPurpose.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: AdapterView<*>,
-                view: View?,
-                position: Int,
-                id: Long
-            ) {
-                val selected = items[position]
-                if (selected.contains("기타")) {
-                    etPurposeCustom.visibility = View.VISIBLE
-                } else {
-                    etPurposeCustom.visibility = View.GONE
-                }
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, pos: Int, id: Long) {
+                etPurposeCustom.visibility =
+                    if (items[pos].contains("기타")) View.VISIBLE else View.GONE
             }
-
             override fun onNothingSelected(parent: AdapterView<*>) {}
-        }
-
-        // ----------- 다음 버튼 -----------
-        btnSubmit.setOnClickListener {
-            val name = etUserName.text.toString()
-            val major = etMajor.text.toString()
-            val peopleStr = etPeople.text.toString()
-
-            if (name.isBlank() || major.isBlank() || peopleStr.isBlank()) {
-                Toast.makeText(requireContext(), "모든 정보를 입력해주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val people = peopleStr.toIntOrNull()
-            if (people == null || people <= 0) {
-                Toast.makeText(requireContext(), "인원 수를 올바르게 입력해주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val purpose = if (etPurposeCustom.visibility == View.VISIBLE) {
-                etPurposeCustom.text.toString()
-            } else {
-                spPurpose.selectedItem.toString()
-            }
-
-            saveReservation(name, major, people, purpose)
-            dialog.dismiss()
         }
 
         btnCancel.setOnClickListener { dialog.dismiss() }
 
+        btnNext.setOnClickListener {
+            val name = etUserName.text.toString().trim()
+            val major = etMajor.text.toString().trim()
+            val peopleStr = etPeople.text.toString().trim()
+            val purpose =
+                if (etPurposeCustom.visibility == View.VISIBLE)
+                    etPurposeCustom.text.toString().trim()
+                else spPurpose.selectedItem.toString()
+
+            // 입력 검증
+            when {
+                name.isBlank() -> {
+                    Toast.makeText(requireContext(), "이름을 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                major.isBlank() -> {
+                    Toast.makeText(requireContext(), "학과를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                peopleStr.isBlank() -> {
+                    Toast.makeText(requireContext(), "인원을 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                peopleStr.toIntOrNull() == null || peopleStr.toInt() <= 0 -> {
+                    Toast.makeText(requireContext(), "인원 수를 올바르게 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                purpose.isBlank() -> {
+                    Toast.makeText(requireContext(), "목적을 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+            }
+
+            // 예약 내용 확인 모달로 이동
+            val people = peopleStr.toInt()
+            dialog.dismiss()
+
+            openReservationConfirmDialog(name, major, people, purpose)
+        }
+
         dialog.show()
     }
 
+
+    private fun openReservationConfirmDialog(
+        userName: String,
+        major: String,
+        people: Int,
+        purpose: String
+    ) {
+        val range = selectedRange ?: return
+        val dialogView = layoutInflater.inflate(R.layout.reservation_confirm_dialog, null)
+
+        val dialog = AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val tvRoom = dialogView.findViewById<TextView>(R.id.tvConfirmRoom)
+        val tvTime = dialogView.findViewById<TextView>(R.id.tvConfirmTime)
+        val tvUser = dialogView.findViewById<TextView>(R.id.tvConfirmUser)
+        val tvPurpose = dialogView.findViewById<TextView>(R.id.tvConfirmPurpose)
+        val tvPeople = dialogView.findViewById<TextView>(R.id.tvConfirmPeople)
+
+        val date = weekDates[range.day]
+        val dateStr = getFormattedDate(date)     // "수요일 10:00 - 12:00" 형태 포맷 함수
+
+        tvRoom.text = buildingName + " " + roomId
+        tvTime.text = dateStr
+        tvUser.text = "$userName ($major)"
+        tvPurpose.text = purpose
+        tvPeople.text = "${people}명"
+
+        val btnConfirm = dialogView.findViewById<Button>(R.id.btnConfirmSubmit)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btnConfirmCancel)
+
+        btnCancel.setOnClickListener { dialog.dismiss() }
+
+        btnConfirm.setOnClickListener {
+            dialog.dismiss()
+            saveReservation(userName, major, people, purpose)   // 최종 저장
+        }
+
+        dialog.show()
+    }
+
+
+    private fun showReservationSuccessDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.reservation_success_dialog, null)
+
+        val dialog = AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val btnOk = dialogView.findViewById<Button>(R.id.btnSuccessOk)
+        btnOk.setOnClickListener { dialog.dismiss() }
+
+        dialog.show()
+    }
+
+
+
+
     // ============================================================
-    // 6) Firestore 저장
+    // 7) Firestore 저장 (날짜 포함)
     // ============================================================
+
+
+    private fun getWeekDateStrings(): List<String> {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+        return weekDates.map { sdf.format(it) }
+    }
+
 
     private fun saveReservation(
         userName: String,
@@ -554,9 +861,17 @@ class RoomScheduleFragment : Fragment() {
         purpose: String
     ) {
         val range = selectedRange ?: return
-        val dayKey = dayKeys[range.day]   // Mon, Tue ...
+        if (!isDateReservable(range.day)) {
+            Toast.makeText(requireContext(), "해당 날짜는 예약이 불가능합니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dayKey = dayKeys[range.day]
+        val date = weekDates[range.day]
+        val dateString = getDateString(date)
 
         val reservation = hashMapOf(
+            "userId" to uid,
             "userName" to userName,
             "major" to major,
             "people" to people,
@@ -564,20 +879,23 @@ class RoomScheduleFragment : Fragment() {
             "roomId" to roomId,
             "buildingId" to buildingId,
             "day" to dayKey,
+            "date" to dateString,
             "periodStart" to range.start,
             "periodEnd" to range.end,
-            "timestamp" to System.currentTimeMillis()
+            "timestamp" to System.currentTimeMillis(),
+            "status" to "approved"   // 바로 승인
         )
 
         db.collection("reservations")
             .add(reservation)
             .addOnSuccessListener {
-                Toast.makeText(requireContext(), "예약 완료!", Toast.LENGTH_SHORT).show()
-                // 예약된 것을 시간표에 반영
                 applyReservationToTable(range.day, range.start, range.end)
-            }.addOnFailureListener {
-                Toast.makeText(requireContext(), "오류 발생", Toast.LENGTH_SHORT).show()
+                showReservationSuccessDialog()
             }
+            .addOnFailureListener {
+                Toast.makeText(requireContext(), "예약 저장 실패", Toast.LENGTH_SHORT).show()
+            }
+
     }
 
     // 예약 완료 후 시간표에 ‘예약됨’ 표시
@@ -599,13 +917,18 @@ class RoomScheduleFragment : Fragment() {
     }
 
     // ============================================================
-    // 7) Firestore에서 기존 예약 불러오기
+    // 8) Firestore에서 기존 예약 불러오기 (현재 주만)
     // ============================================================
 
     private fun loadExistingReservations() {
+
+        val weekDateStrings = getWeekDateStrings()
+
         db.collection("reservations")
             .whereEqualTo("buildingId", buildingId)
             .whereEqualTo("roomId", roomId)
+            .whereIn("date", weekDateStrings)
+            .whereEqualTo("status", "approved")
             .get()
             .addOnSuccessListener { result ->
                 for (doc in result) {
@@ -616,23 +939,24 @@ class RoomScheduleFragment : Fragment() {
                     val start = doc.getLong("periodStart")?.toInt() ?: continue
                     val end = doc.getLong("periodEnd")?.toInt() ?: continue
 
-                    // 시간표에 표시
                     markReservationOnTable(dayIndex, start, end)
                 }
             }
     }
+
 
     private fun markReservationOnTable(day: Int, start: Int, end: Int) {
         for (p in start..end) {
             val key = day to p
             val tv = cellViews[key] ?: continue
 
-            tv.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_cell_reserved)
-
+            tv.background = ContextCompat.getDrawable(
+                requireContext(),
+                R.drawable.bg_cell_reserved
+            )
             tv.text = "예약됨"
             tv.setTextColor(Color.BLACK)
 
-            // 이미 예약된 칸은 클릭 불가
             tv.setOnClickListener(null)
             cellState[key] = SlotState.RESERVED
         }

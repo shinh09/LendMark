@@ -19,6 +19,7 @@
         android:textStyle="bold"
         android:gravity="center"
         android:textColor="#190848"
+        android:layout_marginTop="12dp"
         android:layout_marginBottom="12dp" />
 
     <!-- 안내 문구 -->
@@ -26,10 +27,19 @@
         android:id="@+id/tvGuide"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="예약하실 시간을 선택해주세요. 연속된 시간만 선택 가능합니다."
+        android:text="예약하실 시간을 선택해주세요."
         android:textSize="13sp"
         android:textColor="#4B5563"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginBottom="3dp" />
+
+    <TextView
+        android:id="@+id/tvGuide2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="연속된 시간만 선택 가능하며, 최대 한 달 이후까지 예약이 가능합니다."
+        android:textSize="13sp"
+        android:textColor="#4B5563"
+        android:layout_marginBottom="10dp" />
 
     <!-- legend -->
     <LinearLayout
