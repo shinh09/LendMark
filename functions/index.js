@@ -7,7 +7,7 @@ const nodemailer = require("nodemailer");
 admin.initializeApp();
 
 // ======================================================
-// 1. ✉️ Email Verification (네 기존 코드 그대로 유지)
+//  Email Verification
 // ======================================================
 
 // 환경변수 가져오기
@@ -72,25 +72,75 @@ exports.verifyEmailCode = onCall(async (req) => {
   return { ok: true };
 });
 
-// ======================================================
-// 2. 📌예약 기능 추가 (여기부터 새 기능!!!)
-// ======================================================
 
-// (A) 지난 7일 지난 예약 → 자동 expired 처리 (15분마다 실행)
-/**
- * 7일 지난 예약을 자동으로 expired 처리하는 스케줄러
- * --> 15분마다 실행됨
- */
-exports.expireOldReservations = onSchedule("every 15 minutes", async () => {
+ exports.finishPastReservations = onSchedule("every 30 minutes", async () => {
+   const now = new Date();
+   const db = admin.firestore();
+
+   // 오늘 날짜 (YYYY-MM-DD)
+   const yyyy = now.getFullYear();
+   const mm = String(now.getMonth() + 1).padStart(2, "0");
+   const dd = String(now.getDate()).padStart(2, "0");
+   const todayStr = `${yyyy}-${mm}-${dd}`;
+
+   console.log("Running finishPastReservations:", todayStr);
+
+   // 1) 아직 approved 상태인 예약 전부 가져오기
+   const snapshot = await db.collection("reservations")
+     .where("status", "==", "approved")
+     .get();
+
+   if (snapshot.empty) {
+     console.log("No approved reservations found.");
+     return null;
+   }
+
+   const batch = db.batch();
+
+   snapshot.forEach(doc => {
+     const data = doc.data();
+     const dateStr = data.date; // yyyy-MM-dd
+     const periodEnd = data.periodEnd; // integer (e.g., 1 = 09:00~10:00)
+     const reservationDay = new Date(dateStr);
+
+     // → 종료 시간 = 오전 8시 기준 periodEnd + 1
+     const endHour = 8 + (periodEnd + 1);
+
+     // ============ 1) 날짜가 오늘 이전이면 finished ============
+     if (dateStr < todayStr) {
+       batch.update(doc.ref, { status: "finished" });
+       return;
+     }
+
+     // 날짜가 오늘 이후이면 아직 finished 아니므로 return
+     if (dateStr > todayStr) return;
+
+     // ============ 2) 날짜가 오늘과 같으면 시간 비교 ============
+     const nowHour = now.getHours();
+
+     if (nowHour >= endHour) {
+       batch.update(doc.ref, { status: "finished" });
+     }
+   });
+
+   await batch.commit();
+   console.log("finishPastReservations completed.");
+   return null;
+ });
+
+
+/* ============================================================
+   2) 매일 실행 → 1주일 지난 finished 예약을 expired 처리
+   ============================================================ */
+exports.expireOldReservations = onSchedule("every day 00:00", async () => {
   const now = Date.now();
-  const expireThreshold = now - 7 * 24 * 60 * 60 * 1000; // 7일 전 timestamp
+  const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
-  const db = admin.firestore();
+  console.log("Running expireOldReservations");
 
-  // status = approved 인 예약 중에서 오래된 항목 탐색
   const snapshot = await db.collection("reservations")
-    .where("status", "==", "approved")
-    .where("timestamp", "<=", expireThreshold)
+    .where("status", "==", "finished")
+    .where("timestamp", "<", oneWeekAgo)
     .get();
 
   if (snapshot.empty) {
@@ -98,17 +148,16 @@ exports.expireOldReservations = onSchedule("every 15 minutes", async () => {
     return null;
   }
 
-  console.log(`Found ${snapshot.size} old reservations. Expiring...`);
+  console.log(`Expiring ${snapshot.size} reservations...`);
 
   const batch = db.batch();
-
-  snapshot.forEach((doc) => {
+  snapshot.forEach(doc => {
     batch.update(doc.ref, { status: "expired" });
   });
 
   await batch.commit();
-  console.log("Expiration completed!");
 
+  console.log("Old reservations expired!");
   return null;
 });
 
