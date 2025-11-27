@@ -1,93 +1,176 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@drawable/bg_dialog_round"
-    android:padding="24dp">
+    android:layout_height="wrap_content"
+    android:padding="24dp"
+    android:background="@drawable/bg_dialog_round">
 
-    <!-- Header -->
-    <TextView
-        android:id="@+id/tvDialogTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Register Classroom Info"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:textColor="@color/black"
-        android:layout_gravity="center_horizontal"/>
-
-    <TextView
-        android:id="@+id/tvDialogSubtitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:text="Please select the facility information for Changhak-gwan 205."
-        android:layout_gravity="center_horizontal"/>
-
-    <!-- Info Box -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Please register objective facility information based on your experience using this classroom."
-        android:background="@drawable/bg_edittext_rounded"
-        android:padding="12dp"
-        android:layout_marginTop="16dp" />
-
-    <!-- Checkbox List -->
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="16dp">
-        <LinearLayout
-            android:id="@+id/llCheckboxContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"/>
-    </ScrollView>
-
-    <!-- Selected Info Section -->
     <LinearLayout
-        android:id="@+id/llSelectedInfo"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="@drawable/bg_edittext_rounded"
-        android:padding="12dp"
-        android:layout_marginTop="16dp"
-        android:visibility="gone">
+        android:orientation="vertical">
 
+        <!-- Title -->
         <TextView
-            android:id="@+id/tvSelectedCount"
+            android:id="@+id/tvDialogTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Selected Info (0)"/>
+            android:text="강의실 리뷰 등록"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="@color/black"
+            android:layout_gravity="center_horizontal" />
 
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/chipGroupSelected"
+        <!-- Subtitle -->
+        <TextView
+            android:id="@+id/tvDialogSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="사용한 강의실에 대한 정보를 등록해주세요."
+            android:textColor="@color/gray_dark"
+            android:layout_gravity="center_horizontal" />
+
+        <!-- Capacity (Dropdown) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="수용 인원"
+            android:textStyle="bold" />
+
+        <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            app:chipSpacingHorizontal="4dp"
-            app:chipSpacingVertical="4dp" />
+            android:hint="예: 30명">
+
+            <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                android:id="@+id/dropdownCapacity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Class Type -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="강의실 타입"
+            android:textStyle="bold"
+            android:layout_marginTop="20dp"/>
+
+        <RadioGroup
+            android:id="@+id/radioGroupClassType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp"
+            android:background="@drawable/bg_edittext_rounded"/>
+
+        <!-- Features / Tags -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="강의실 특징"
+            android:textStyle="bold"
+            android:layout_marginTop="20dp"/>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="150dp">
+
+            <LinearLayout
+                android:id="@+id/llEquipmentContainer"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
+        </ScrollView>
+
+        <!-- Selected Tags -->
+        <LinearLayout
+            android:id="@+id/llSelectedInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="12dp"
+            android:background="@drawable/bg_edittext_rounded"
+            android:layout_marginTop="16dp"
+            android:visibility="gone"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvSelectedCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="선택된 태그 (0)" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupSelected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                app:chipSpacingHorizontal="4dp"
+                app:chipSpacingVertical="4dp"/>
+        </LinearLayout>
+
+        <!-- Photo Buttons -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="강의실 사진 추가"
+            android:textStyle="bold"
+            android:layout_marginTop="20dp"/>
+
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <Button
+                android:id="@+id/btnAddPhoto"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="사진 선택" />
+
+            <Button
+                android:id="@+id/btnTakePhoto"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="촬영하기"
+                android:layout_marginLeft="12dp"/>
+        </LinearLayout>
+
+        <!-- Photo Preview -->
+        <HorizontalScrollView
+            android:id="@+id/photoScrollView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/llPhotoPreviewContainer"
+                android:orientation="horizontal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+        </HorizontalScrollView>
+
+        <!-- Buttons -->
+        <Button
+            android:id="@+id/btnRegister"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="등록하기"
+            android:layout_marginTop="24dp"
+            android:enabled="false"/>
+
+        <Button
+            android:id="@+id/btnCancel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="취소"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+
     </LinearLayout>
-
-    <!-- Buttons -->
-    <Button
-        android:id="@+id/btnRegister"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Register"
-        android:enabled="false"
-        android:layout_marginTop="24dp"/>
-
-    <Button
-        android:id="@+id/btnCancel"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Cancel" />
-
-</LinearLayout>
+</ScrollView>

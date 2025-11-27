@@ -1,20 +1,20 @@
 package com.example.lendmark.ui.my
 
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
+import android.view.*
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.example.lendmark.R
 import com.example.lendmark.databinding.FragmentMyReservationBinding
+import com.google.android.material.button.MaterialButton
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import android.widget.TextView
-import com.google.android.material.button.MaterialButton
+import com.google.firebase.storage.FirebaseStorage
 
 class MyReservationFragment : Fragment() {
 
@@ -22,7 +22,7 @@ class MyReservationFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val db = FirebaseFirestore.getInstance()
-    private val uid = FirebaseAuth.getInstance().currentUser?.uid
+    private val uid get() = FirebaseAuth.getInstance().currentUser?.uid
 
     private var reservationList: List<ReservationFS> = emptyList()
     private var buildingNameMap: Map<String, String> = emptyMap()
@@ -45,18 +45,20 @@ class MyReservationFragment : Fragment() {
         loadReservations()
     }
 
+    // ----------------------------------------------------------------------
+    // 1) Load reservation + building name
+    // ----------------------------------------------------------------------
     private fun loadReservations() {
         if (uid == null) return
 
-        // 1. Load building names first
         db.collection("buildings").get()
             .addOnSuccessListener { buildingsSnapshot ->
                 if (!isAdded) return@addOnSuccessListener
+
                 buildingNameMap = buildingsSnapshot.documents.associate {
                     it.id to (it.getString("name") ?: "")
                 }
 
-                // 2. Then, load reservations
                 db.collection("reservations")
                     .whereEqualTo("userId", uid)
                     .get()
@@ -74,38 +76,36 @@ class MyReservationFragment : Fragment() {
                                 purpose = doc.getString("purpose") ?: "",
                                 status = doc.getString("status") ?: "approved"
                             )
-                        }.sortedByDescending { it.date } // Sort by most recent date
+                        }.sortedByDescending { it.date }
 
                         displayReservations()
                     }
-                    .addOnFailureListener {
-                        if (isAdded) Toast.makeText(requireContext(), "Failed to load reservations", Toast.LENGTH_SHORT).show()
-                    }
-            }
-            .addOnFailureListener {
-                if (isAdded) Toast.makeText(requireContext(), "Failed to load building data", Toast.LENGTH_SHORT).show()
             }
     }
 
+    // ----------------------------------------------------------------------
+    // 2) Display reservation list
+    // ----------------------------------------------------------------------
     private fun displayReservations() {
         val container = binding.reservationContainer
         container.removeAllViews()
 
         val inflater = LayoutInflater.from(requireContext())
         val filtered = when (binding.filterGroup.checkedChipId) {
+
             R.id.filterApproved ->
                 reservationList.filter { it.status == "approved" }
 
             R.id.filterFinished ->
                 reservationList.filter {
                     it.status == "finished" ||
+                            it.status == "reviewed" ||   // ← 추가!
                             it.status == "canceled" ||
-                            it.status == "expired"     // ← 여기가 핵심!
+                            it.status == "expired"
                 }
 
             else -> reservationList
         }
-
 
         if (filtered.isEmpty()) {
             addEmptyMessage(container)
@@ -133,7 +133,6 @@ class MyReservationFragment : Fragment() {
             resetCardToDefault(card)
 
             when (reservation.status) {
-
                 "approved" -> {
                     tvStatus.setTextColor(Color.WHITE)
                     tvStatus.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_status_green)
@@ -143,90 +142,163 @@ class MyReservationFragment : Fragment() {
                 "finished" -> {
                     tvStatus.setTextColor(ContextCompat.getColor(requireContext(), R.color.colorPrimary))
                     tvStatus.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_status_gray)
-                    btnRegisterInfo.visibility = View.VISIBLE   // ✔ 정보 등록 가능
+                    btnRegisterInfo.visibility = View.VISIBLE
                 }
-
-                "expired" -> {
+                "reviewed" -> {
+                    tvStatus.text = "등록완료"
                     tvStatus.setTextColor(ContextCompat.getColor(requireContext(), R.color.gray))
                     tvStatus.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_status_gray)
-                    btnRegisterInfo.visibility = View.GONE      // ❌ 등록 비활성
-                    btnCancel.visibility = View.GONE            // 취소도 불가
-                    setCardToCanceledState(card)               // 흐리게 처리
+
+                    btnRegisterInfo.visibility = View.GONE
+                    btnCancel.visibility = View.GONE
+
+                    setCardToReviewedState(card)  // 회색화 + 비활성화
                 }
 
-                "canceled" -> {
+                "expired", "canceled" -> {
                     tvStatus.setTextColor(ContextCompat.getColor(requireContext(), R.color.gray))
                     tvStatus.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_status_gray)
                     setCardToCanceledState(card)
                 }
             }
 
-
-            card.setOnClickListener {
-
-                ReservationDetailDialogFS(
-                    reservation = reservation,
-
-                    onCancelClick = {
-                        ConfirmCancelDialog {
-                            updateStatus(reservation.id, "canceled")
-                        }.show(childFragmentManager, "ConfirmCancelDialog")
-                    },
-
-                    onRegisterClick = {
-                        // ✔ 등록 가능한 상태인지 한 번 더 검사
-                        if (reservation.status == "finished") {
-                            val dialog = RegisterInfoDialog { features ->
-                                updateRoomFeatures(reservation.buildingId, reservation.roomId, features)
-                            }
-                            dialog.show(parentFragmentManager, "RegisterInfoDialog")
-                        }
-                    }
-
-                ).show(childFragmentManager, "ReservationDetailDialogFS")
-            }
-
-
-            btnCancel.setOnClickListener { 
-                ConfirmCancelDialog {
-                    updateStatus(reservation.id, "canceled")
-                }.show(parentFragmentManager, "ConfirmCancelDialog")
-            }
+            // -------------------------
+            //  리뷰 작성 버튼
+            // -------------------------
             btnRegisterInfo.setOnClickListener {
-                val dialog = RegisterInfoDialog { features ->
-                    updateRoomFeatures(reservation.buildingId, reservation.roomId, features)
+                val dialog = RegisterInfoDialog { capacity, classType, tags, imageUris ->
+
+                    uploadReviewToFirestore(
+                        reservation = reservation,
+                        capacity = capacity,
+                        classType = classType,
+                        tags = tags,
+                        imageUris = imageUris
+                    )
                 }
+
                 dialog.show(parentFragmentManager, "RegisterInfoDialog")
             }
 
             container.addView(card)
         }
     }
+    private fun setCardToReviewedState(card: View) {
+        val grayColor = ContextCompat.getColor(requireContext(), R.color.gray)
 
-    private fun updateStatus(id: String, newStatus: String) {
-        db.collection("reservations").document(id)
-            .update("status", newStatus)
-            .addOnSuccessListener { loadReservations() }
-            .addOnFailureListener { Toast.makeText(requireContext(), "Failed to update status", Toast.LENGTH_SHORT).show() }
+        card.isClickable = false
+        card.alpha = 0.5f   // 전체 흐리게
+
+        card.findViewById<TextView>(R.id.tvBuildingRoom).setTextColor(grayColor)
+        card.findViewById<TextView>(R.id.tvDateTime).setTextColor(grayColor)
+        card.findViewById<TextView>(R.id.tvAttendees).setTextColor(grayColor)
+        card.findViewById<TextView>(R.id.tvPurpose).setTextColor(grayColor)
+
+        card.findViewById<MaterialButton>(R.id.btnCancel).visibility = View.GONE
+        card.findViewById<MaterialButton>(R.id.btnRegisterInfo).visibility = View.GONE
     }
 
-    private fun updateRoomFeatures(buildingId: String, roomId: String, features: List<String>) {
-        if (buildingId.isEmpty() || roomId.isEmpty()) {
-            Toast.makeText(requireContext(), "Cannot register info: Invalid reservation data.", Toast.LENGTH_SHORT).show()
-            return
-        }
 
-        db.collection("buildings").document(buildingId)
-            .collection("rooms").document(roomId)
-            .update("features", features)
+    // ----------------------------------------------------------------------
+    // 3) Upload review to Firestore + Storage
+    // ----------------------------------------------------------------------
+    private fun uploadReviewToFirestore(
+        reservation: ReservationFS,
+        capacity: Int,
+        classType: String,
+        tags: List<String>,
+        imageUris: List<Uri>
+    ) {
+        val reviewDoc = db.collection("reviews").document()
+
+        val reviewData = hashMapOf(
+            "reservationId" to reservation.id,
+            "buildingId" to reservation.buildingId,
+            "buildingName" to buildingNameMap[reservation.buildingId],
+            "roomId" to reservation.roomId,
+            "roomName" to "${reservation.roomId}호",
+            "userId" to uid,
+            "capacity" to capacity,
+            "classType" to classType,
+            "tags" to tags,
+            "imageUrls" to listOf<String>(),
+            "createdAt" to System.currentTimeMillis()
+        )
+
+        reviewDoc.set(reviewData)
             .addOnSuccessListener {
-                Toast.makeText(requireContext(), "Classroom info registered successfully!", Toast.LENGTH_SHORT).show()
+
+                // ---------------------------------------------------------
+                // 📌 Case 1) 이미지가 없는 경우 → 바로 reviewed 처리
+                // ---------------------------------------------------------
+                if (imageUris.isEmpty()) {
+
+                    db.collection("reservations")
+                        .document(reservation.id)
+                        .update("status", "reviewed")
+                        .addOnSuccessListener {
+                            loadReservations()  // UI 새로고침
+                        }
+
+                    Toast.makeText(requireContext(), "리뷰가 저장되었습니다!", Toast.LENGTH_SHORT).show()
+                    return@addOnSuccessListener
+                }
+
+                // ---------------------------------------------------------
+                // 📌 Case 2) 이미지가 있는 경우 → 저장 후 reviewed 처리
+                // ---------------------------------------------------------
+                uploadImages(reservation.id, reviewDoc.id, imageUris) { urls ->
+
+                    reviewDoc.update("imageUrls", urls)
+
+                    db.collection("reservations")
+                        .document(reservation.id)
+                        .update("status", "reviewed")
+                        .addOnSuccessListener {
+                            loadReservations()  // UI 새로고침
+                        }
+
+                    Toast.makeText(requireContext(), "리뷰가 저장되었습니다!", Toast.LENGTH_SHORT).show()
+                }
             }
-            .addOnFailureListener { e ->
-                Toast.makeText(requireContext(), "Failed to register info: ${e.message}", Toast.LENGTH_LONG).show()
+            .addOnFailureListener {
+                Toast.makeText(requireContext(), "리뷰 저장 실패", Toast.LENGTH_SHORT).show()
             }
     }
 
+
+    // ----------------------------------------------------------------------
+    // 4) Upload images to Firebase Storage
+    // ----------------------------------------------------------------------
+    private fun uploadImages(
+        reservationId: String,
+        reviewId: String,
+        uriList: List<Uri>,
+        onComplete: (List<String>) -> Unit
+    ) {
+        val storageRef = FirebaseStorage.getInstance().reference
+        val uploadedUrls = mutableListOf<String>()
+        var uploadedCount = 0
+
+        uriList.forEachIndexed { index, uri ->
+            val fileRef = storageRef.child("reviews/$reservationId/${reviewId}_img_$index.jpg")
+
+            fileRef.putFile(uri)
+                .addOnSuccessListener {
+                    fileRef.downloadUrl.addOnSuccessListener { downloadUri ->
+
+                        uploadedUrls.add(downloadUri.toString())
+                        uploadedCount++
+
+                        if (uploadedCount == uriList.size) {
+                            onComplete(uploadedUrls)
+                        }
+                    }
+                }
+        }
+    }
+
+    // ----------------------------------------------------------------------
     private fun addEmptyMessage(container: LinearLayout) {
         val tv = TextView(requireContext()).apply {
             text = "No reservations found."
@@ -242,23 +314,25 @@ class MyReservationFragment : Fragment() {
     }
 
     private fun resetCardToDefault(card: View) {
-        card.isClickable = true
-        card.findViewById<TextView>(R.id.tvBuildingRoom).setTextColor(ContextCompat.getColor(requireContext(), R.color.black))
-        card.findViewById<TextView>(R.id.tvDateTime).setTextColor(ContextCompat.getColor(requireContext(), R.color.gray_dark))
-        card.findViewById<TextView>(R.id.tvAttendees).setTextColor(ContextCompat.getColor(requireContext(), R.color.gray_dark))
-        card.findViewById<TextView>(R.id.tvPurpose).setTextColor(ContextCompat.getColor(requireContext(), R.color.gray_dark))
+        card.findViewById<TextView>(R.id.tvBuildingRoom)
+            .setTextColor(ContextCompat.getColor(requireContext(), R.color.black))
+        card.findViewById<TextView>(R.id.tvDateTime)
+            .setTextColor(ContextCompat.getColor(requireContext(), R.color.gray_dark))
+        card.findViewById<TextView>(R.id.tvAttendees)
+            .setTextColor(ContextCompat.getColor(requireContext(), R.color.gray_dark))
+        card.findViewById<TextView>(R.id.tvPurpose)
+            .setTextColor(ContextCompat.getColor(requireContext(), R.color.gray_dark))
 
         card.findViewById<MaterialButton>(R.id.btnCancel).visibility = View.GONE
         card.findViewById<MaterialButton>(R.id.btnRegisterInfo).visibility = View.GONE
     }
 
     private fun setCardToCanceledState(card: View) {
-        val grayColor = ContextCompat.getColor(requireContext(), R.color.gray)
-        card.findViewById<TextView>(R.id.tvBuildingRoom).setTextColor(grayColor)
-        card.findViewById<TextView>(R.id.tvDateTime).setTextColor(grayColor)
-        card.findViewById<TextView>(R.id.tvAttendees).setTextColor(grayColor)
-        card.findViewById<TextView>(R.id.tvPurpose).setTextColor(grayColor)
-
+        val gray = ContextCompat.getColor(requireContext(), R.color.gray)
+        card.findViewById<TextView>(R.id.tvBuildingRoom).setTextColor(gray)
+        card.findViewById<TextView>(R.id.tvDateTime).setTextColor(gray)
+        card.findViewById<TextView>(R.id.tvAttendees).setTextColor(gray)
+        card.findViewById<TextView>(R.id.tvPurpose).setTextColor(gray)
         card.findViewById<MaterialButton>(R.id.btnCancel).visibility = View.GONE
         card.findViewById<MaterialButton>(R.id.btnRegisterInfo).visibility = View.GONE
     }
@@ -269,7 +343,9 @@ class MyReservationFragment : Fragment() {
     }
 }
 
-/** Firestore에서 불러오는 Reservation 모델 */
+// ---------------------------------------------------------------
+// Reservation Firestore Model
+// ---------------------------------------------------------------
 data class ReservationFS(
     val id: String = "",
     val buildingId: String = "",

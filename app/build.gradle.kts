@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     id("com.google.gms.google-services")
+    id("org.jetbrains.kotlin.kapt")   // ← 이거 추가!!
 }
 
 android {
@@ -75,4 +76,12 @@ dependencies {
     // 최신 버전
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("com.google.firebase:firebase-storage:20.3.0")
+
+    // Room
+    implementation("androidx.room:room-runtime:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
+
+    // Kotlin Extensions + Coroutines support for Room
+    implementation("androidx.room:room-ktx:2.6.1")
+
 }
