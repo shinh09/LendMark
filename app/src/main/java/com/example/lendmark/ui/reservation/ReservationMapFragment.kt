@@ -1,5 +1,3 @@
-// app/src/main/java/com/example/lendmark/ui/reservation/ReservationMapFragment.kt
-
 package com.example.lendmark.ui.reservation
 
 import android.graphics.*
@@ -11,16 +9,30 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import com.example.lendmark.R
 import com.example.lendmark.data.model.Building
+import com.example.lendmark.data.model.ClassSchedule
+import com.example.lendmark.data.model.RoomSchedule
 import com.example.lendmark.ui.main.MainActivity
 import com.example.lendmark.ui.room.RoomListFragment
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.kakao.vectormap.*
-
 import com.kakao.vectormap.label.Label
 import com.kakao.vectormap.label.LabelLayer
 import com.kakao.vectormap.label.LabelOptions
 import com.kakao.vectormap.label.LabelStyle
 import com.kakao.vectormap.label.LabelStyles
+import java.text.SimpleDateFormat
+import java.util.*
+
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+
+import com.kakao.vectormap.camera.CameraUpdateFactory
+
+import android.widget.ImageButton
+
+
+
 
 class ReservationMapFragment : Fragment() {
 
@@ -28,8 +40,56 @@ class ReservationMapFragment : Fragment() {
     private var kakaoMap: KakaoMap? = null
     private val db = FirebaseFirestore.getInstance()
 
-    // 라벨(마커)을 올릴 레이어
     private var buildingLayer: LabelLayer? = null
+
+    private fun isGooglePlayServicesAvailable(): Boolean {
+        return try {
+            Class.forName("com.google.android.gms.common.GooglePlayServicesUtil")
+            true
+        } catch (e: ClassNotFoundException) {
+            false
+        }
+    }
+    //내위치
+    private fun isEmulator(): Boolean {
+        val model = android.os.Build.MODEL.lowercase()
+        val product = android.os.Build.PRODUCT.lowercase()
+        val brand = android.os.Build.BRAND.lowercase()
+
+        return (model.contains("emulator")
+                || model.contains("sdk")
+                || model.contains("genymotion")
+                || product.contains("sdk_gphone")
+                || brand.contains("generic"))
+    }
+
+    private fun moveToMyLocation() {
+
+        // 에뮬레이터인지 체크
+        if (isEmulator()) {
+            // 안전 fallback
+            val fallbackPos = LatLng.from(37.632632, 127.078056) // 다산관
+            kakaoMap?.moveCamera(CameraUpdateFactory.newCenterPosition(fallbackPos))
+            return
+        }
+
+        val permission = android.Manifest.permission.ACCESS_FINE_LOCATION
+        if (requireContext().checkSelfPermission(permission)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(permission), 4001)
+            return
+        }
+
+        fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                val myPos = LatLng.from(loc.latitude, loc.longitude)
+                kakaoMap?.moveCamera(CameraUpdateFactory.newCenterPosition(myPos))
+            }
+        }
+    }
+
+
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -39,14 +99,17 @@ class ReservationMapFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val myLocationButton = view.findViewById<ImageButton>(R.id.btnMyLocation)
+
+        myLocationButton.setOnClickListener {
+            moveToMyLocation()
+        }
+
         mapView = view.findViewById(R.id.map_view)
 
         mapView?.start(
             object : MapLifeCycleCallback() {
-                override fun onMapDestroy() {
-                    Log.d("KAKAO_MAP", "onMapDestroy")
-                }
-
+                override fun onMapDestroy() {}
                 override fun onMapError(error: Exception) {
                     Log.e("KAKAO_MAP", "Map error: ${error.message}", error)
                 }
@@ -54,173 +117,273 @@ class ReservationMapFragment : Fragment() {
             object : KakaoMapReadyCallback() {
                 override fun onMapReady(map: KakaoMap) {
                     kakaoMap = map
-                    Log.d("KAKAO_MAP", "onMapReady OK")
+                    // ❶ 지도 먼저 표시
+                    loadBuildingsWithOccupancy()
 
-                    val labelManager = map.labelManager
-                    if (labelManager == null) {
-                        Log.e("KAKAO_MAP", "labelManager is null")
-                        return
+                    // ⭐ 구글 플레이가 있는 기기에서만 현재 위치 기능 활성화
+                    if (isGooglePlayServicesAvailable()) {
+                        initLocationProvider()
+                        requestMyLocation()
+                    } else {
+                        Log.w("LOCATION", "Google Play Services not available - skipping location")
                     }
 
-                    // 기본 라벨 레이어 사용
+                    val labelManager = map.labelManager ?: return     // ⭐ 수정 부분
                     buildingLayer = labelManager.layer
                     buildingLayer?.setVisible(true)
                     buildingLayer?.setClickable(true)
 
-                    // 마커(라벨) 클릭 리스너
-                    map.setOnLabelClickListener(object : KakaoMap.OnLabelClickListener {
-                        override fun onLabelClicked(
-                            kakaoMap: KakaoMap,
-                            layer: LabelLayer,
-                            label: Label
-                        ): Boolean {
-                            if (layer !== buildingLayer) return false
+                    map.setOnLabelClickListener { kakaoMap, layer, label ->
+                        if (layer !== buildingLayer) return@setOnLabelClickListener false
 
-                            val building = label.tag as? Building ?: return false
+                        val building = label.tag as? Building ?: return@setOnLabelClickListener false
 
-                            val bundle = Bundle().apply {
-                                putString("buildingId", building.code.toString())
-                                putString("buildingName", building.name)
-                            }
-
-                            val fragment = RoomListFragment().apply {
-                                arguments = bundle
-                            }
-
-                            (requireActivity() as MainActivity).replaceFragment(
-                                fragment,
-                                building.name   // ← MainActivity 상단 타이틀용
-                            )
-                            return true
+                        val bundle = Bundle().apply {
+                            putString("buildingId", building.code.toString())
+                            putString("buildingName", building.name)
                         }
-                    })
 
+                        val fragment = RoomListFragment().apply {
+                            arguments = bundle
+                        }
 
-                    // Firestore → 건물 목록 불러와서 마커 찍기
-                    loadBuildingsAndAddMarkers()
+                        (requireActivity() as MainActivity).replaceFragment(
+                            fragment,
+                            building.name
+                        )
+                        true
+                    }
+
+                    // ⭐ 예약률 포함하여 마커 찍기
+                    loadBuildingsWithOccupancy()
                 }
 
                 override fun getPosition(): LatLng =
-                    LatLng.from(37.632632, 127.078056)   // 다산관 근처
+                    LatLng.from(37.632632, 127.078056)
 
-                override fun getZoomLevel(): Int = 16
+                override fun getZoomLevel() = 16
 
-                override fun isVisible(): Boolean = true
+                override fun isVisible() = true
 
                 override fun getMapViewInfo(): MapViewInfo =
                     MapViewInfo.from("openmap", MapType.NORMAL)
             }
         )
     }
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-    /**
-     * Firestore에서 buildings 컬렉션을 읽어와
-     * 각 건물 위치에 커스텀 마커를 추가한다.
-     */
-    private fun loadBuildingsAndAddMarkers() {
-        db.collection("buildings")
-            .orderBy("code")
-            .get()
-            .addOnSuccessListener { result ->
-                Log.d("KAKAO_MAP", "buildings loaded: ${result.size()}")
-
-                for (doc in result) {
-                    val building = doc.toObject(Building::class.java)
-                    building.id = doc.id
-
-                    Log.d(
-                        "KAKAO_MAP",
-                        "building ${building.name} lat=${building.naverMapLat}, lng=${building.naverMapLng}"
-                    )
-
-                    if (building.naverMapLat != 0.0 && building.naverMapLng != 0.0) {
-                        val pos = LatLng.from(
-                            building.naverMapLat,
-                            building.naverMapLng
-                        )
-                        addMarkerForBuilding(building, pos)
-                    }
-                }
-            }
-            .addOnFailureListener { e ->
-                Log.e("KAKAO_MAP", "Failed to load buildings: ${e.message}", e)
-            }
+    private fun initLocationProvider() {
+        fusedLocationClient =
+            LocationServices.getFusedLocationProviderClient(requireActivity())
     }
 
-    /**
-     * 하나의 건물에 대해 예약률 마커 비트맵을 만들고, 지도에 라벨로 추가
-     */
-    private fun addMarkerForBuilding(building: Building, position: LatLng) {
-        val map = kakaoMap ?: return
-        val labelManager = map.labelManager ?: return
-        val layer = buildingLayer ?: labelManager.layer ?: return
+    private fun requestMyLocation() {
+        val permission = android.Manifest.permission.ACCESS_FINE_LOCATION
 
-        // TODO: 여기서 실제 예약률 계산 결과로 바꿔주면 됨
-        val occupancyPercent = 50  // 임시 값 (0~100)
-
-        // 1) 커스텀 마커 비트맵 생성
-        val markerBitmap = createBuildingMarkerBitmap(occupancyPercent)
-
-        // 2) 비트맵으로 LabelStyle 등록
-        val styles: LabelStyles = labelManager.addLabelStyles(
-            LabelStyles.from(
-                LabelStyle.from(markerBitmap)
-            )
-        ) ?: run {
-            Log.e("KAKAO_MAP", "LabelStyles is null")
+        if (requireContext().checkSelfPermission(permission)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(permission), 3001)
             return
         }
 
-        // 3) LabelOptions 생성 후 라벨 추가
+        fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                val myLat = loc.latitude
+                val myLng = loc.longitude
+
+                val myPos = LatLng.from(myLat, myLng)
+
+                // 지도 중심 이동
+                kakaoMap?.moveCamera(CameraUpdateFactory.newCenterPosition(myPos))
+
+                addMyLocationMarker(myPos)
+            }
+        }
+    }
+
+    private fun addMyLocationMarker(pos: LatLng) {
+        val map = kakaoMap ?: return
+        val labelManager = map.labelManager ?: return
+        val layer = buildingLayer ?: return
+
+        val markerBitmap = createMyLocationMarker()
+
+        val styles = labelManager.addLabelStyles(
+            LabelStyles.from(LabelStyle.from(markerBitmap))
+        ) ?: return
+
+        val options = LabelOptions.from(pos)
+            .setClickable(false)
+            .setStyles(styles)
+
+        layer.addLabel(options)
+    }
+
+    private fun createMyLocationMarker(): Bitmap {
+        val size = 50
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#4285F4") // 파란 원
+            style = Paint.Style.FILL
+        }
+
+        canvas.drawCircle(
+            size / 2f,
+            size / 2f,
+            size / 2.5f,
+            paint
+        )
+
+        return bitmap
+    }
+
+
+
+    // ------------------------------------------------------------
+    // ⭐ 오늘 날짜 문자열 구하기 ("2025-11-28")
+    // ------------------------------------------------------------
+    private fun getTodayDateString(): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+        return sdf.format(Date())
+    }
+
+    // ⭐ 오늘 요일 구하기 ("Mon", "Tue", ...)
+    private fun getTodayDayString(): String {
+        val sdf = SimpleDateFormat("EEE", Locale.ENGLISH)
+        return sdf.format(Date())
+    }
+
+    // ------------------------------------------------------------
+    // ⭐ Buildings + Reservations 불러와서 예약률 계산 후 마커 배치
+    // ------------------------------------------------------------
+    private fun loadBuildingsWithOccupancy() {
+        val today = getTodayDateString()
+
+        // 1) 오늘 예약된 것들 먼저 가져오기
+        db.collection("reservations")
+            .whereEqualTo("date", today)
+            .get()
+            .addOnSuccessListener { reservationSnap ->
+
+                val todayReservations = reservationSnap.documents
+
+                // 2) 건물 목록 가져오기
+                db.collection("buildings")
+                    .orderBy("code")
+                    .get()
+                    .addOnSuccessListener { buildingSnap ->
+
+                        for (doc in buildingSnap) {
+                            val building = doc.toObject(Building::class.java)
+                            building.id = doc.id
+
+                            // 이 건물 예약만 필터링
+                            val myReservations = todayReservations.filter {
+                                it.getString("buildingId") == building.code.toString()
+                            }
+
+                            // ⭐ 예약률 계산
+                            val percent = calculateOccupancyForBuilding(building, myReservations)
+
+                            if (building.naverMapLat != 0.0 && building.naverMapLng != 0.0) {
+                                val pos = LatLng.from(
+                                    building.naverMapLat,
+                                    building.naverMapLng
+                                )
+                                addMarkerForBuilding(building, pos, percent)
+                            }
+                        }
+                    }
+            }
+    }
+
+    // ------------------------------------------------------------
+    // ⭐ 예약률 계산 함수
+    // ------------------------------------------------------------
+    private fun calculateOccupancyForBuilding(
+        building: Building,
+        reservations: List<DocumentSnapshot>
+    ): Int {
+        var totalSlots = 0
+        var reservedSlots = 0
+
+        val todayDay = getTodayDayString() // "Wed"
+
+        // 1) timetable 기반 전체 슬롯 계산
+        building.timetable.forEach { (_, roomSchedule: RoomSchedule) ->
+            roomSchedule.schedule.forEach { sch: ClassSchedule ->
+                if (sch.day == todayDay) {
+                    totalSlots += (sch.periodEnd - sch.periodStart + 1)
+                }
+            }
+        }
+
+        // 2) 오늘 예약된 슬롯 계산
+        reservations.forEach { res ->
+            val ps = res.getLong("periodStart")?.toInt() ?: 0
+            val pe = res.getLong("periodEnd")?.toInt() ?: 0
+            reservedSlots += (pe - ps + 1)
+        }
+
+        if (totalSlots == 0) return 0
+        return ((reservedSlots.toDouble() / totalSlots) * 100).toInt()
+    }
+
+    // ------------------------------------------------------------
+    // ⭐ 예약률 기반 마커 추가
+    // ------------------------------------------------------------
+    private fun addMarkerForBuilding(
+        building: Building,
+        position: LatLng,
+        percent: Int
+    ) {
+        val map = kakaoMap ?: return
+        val labelManager = map.labelManager ?: return
+        val layer = buildingLayer ?: return
+
+        val markerBitmap = createBuildingMarkerBitmap(percent)
+
+        val styles: LabelStyles = labelManager.addLabelStyles(
+            LabelStyles.from(LabelStyle.from(markerBitmap))
+        ) ?: return
+
         val options = LabelOptions.from(position)
             .setStyles(styles)
             .setTag(building)
             .setClickable(true)
 
-        val label = layer.addLabel(options)
-        Log.d(
-            "KAKAO_MAP",
-            "label added for ${building.name}, percent=$occupancyPercent, label=$label"
-        )
+        layer.addLabel(options)
     }
 
-    /**
-     * 예약률(percent)에 따라 색이 달라지는 동그라미 + 텍스트 마커 비트맵 생성
-     * (네가 올려준 33%, 65%, 88% 같은 스타일의 원형 뱃지)
-     */
+    // ------------------------------------------------------------
+    // ⭐ 예약률 원형 마커 비트맵 생성
+    // ------------------------------------------------------------
     private fun createBuildingMarkerBitmap(percent: Int): Bitmap {
-        val size = 120   // 전체 비트맵 크기(px) – 필요하면 조절
+        val size = 120
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // 배경 원 색상 (예약률 구간별)
         val bgColor = when {
-            percent < 40 -> Color.parseColor("#4CAF50")   // green (~40% 여유)
-            percent < 60 -> Color.parseColor("#FFC107")   // yellow (40~60 보통)
-            percent < 80 -> Color.parseColor("#FF9800")   // orange (60~80 혼잡)
-            else -> Color.parseColor("#F44336")           // red (80%+ 매우 혼잡)
+            percent < 40 -> Color.parseColor("#4CAF50")
+            percent < 60 -> Color.parseColor("#FFC107")
+            percent < 80 -> Color.parseColor("#FF9800")
+            else -> Color.parseColor("#F44336")
         }
 
-        // 바깥 테두리 (네이비 같은 거)
-//        val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-//            color = Color.parseColor("#202040")
-//            style = Paint.Style.FILL
-//        }
-        val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = bgColor
             style = Paint.Style.FILL
         }
 
         val cx = size / 2f
         val cy = size / 2f
-        //val outerR = size / 2f
-        val innerR = size / 2.4f
+        val r = size / 2.4f
 
-        // 바깥 원 + 안쪽 색 원
-        //canvas.drawCircle(cx, cy, outerR, outerPaint)
-        canvas.drawCircle(cx, cy, innerR, innerPaint)
+        canvas.drawCircle(cx, cy, r, paint)
 
-        // 텍스트 ("33%")
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             textSize = 35f
@@ -251,4 +414,5 @@ class ReservationMapFragment : Fragment() {
         buildingLayer = null
         super.onDestroyView()
     }
+
 }

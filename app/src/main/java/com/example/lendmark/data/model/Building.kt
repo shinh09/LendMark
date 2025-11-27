@@ -1,13 +1,25 @@
 package com.example.lendmark.data.model
 
-data class Building(
-    var id: String = "",                 // Firestore 문서 ID
-    val name: String = "",               // 건물 이름
-    val code: Int = 0,                   // 건물 고유 번호
-    val roomCount: Int = 0,              // 이용 가능한 강의실 수
-    val imageUrl: String = "",           // 건물 이미지 URL
-    val naverMapLat: Double = 0.0,       // 네이버 지도 위도
-    val naverMapLng: Double = 0.0      // 네이버 지도 경도
-    //val timetable: Map<String, List<Lecture>> = emptyMap() // 강의실별 시간표
+data class ClassSchedule(
+    val day: String = "",
+    val periodStart: Int = 0,
+    val periodEnd: Int = 0,
+    val subject: String = ""
 )
 
+data class RoomSchedule(
+    val schedule: List<ClassSchedule> = emptyList()
+)
+
+data class Building(
+    var id: String = "",
+    val name: String = "",
+    val code: Int = 0,
+    val roomCount: Int = 0,
+    val imageUrl: String = "",
+    val naverMapLat: Double = 0.0,
+    val naverMapLng: Double = 0.0,
+
+    // Firestore의 timetable(강의실별 강의 시간표)
+    val timetable: Map<String, RoomSchedule> = emptyMap()
+)

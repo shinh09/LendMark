@@ -8,6 +8,18 @@
         android:id="@+id/map_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+    <!-- ⭐ 내 위치 버튼 (항상 위에 뜸) -->
+    <ImageButton
+        android:id="@+id/btnMyLocation"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="20dp"
+        android:layout_marginBottom="100dp"
+        android:background="@drawable/bg_circle_white"
+        android:src="@drawable/ic_my_location"
+        android:padding="12dp"
+        android:elevation="10dp" />
 
     <!-- 예약률 범례 (왼쪽 위 오버레이) -->
     <LinearLayout
@@ -113,6 +125,7 @@
                 android:textSize="12sp"
                 android:textColor="@android:color/black" />
         </LinearLayout>
+
 
     </LinearLayout>
 
