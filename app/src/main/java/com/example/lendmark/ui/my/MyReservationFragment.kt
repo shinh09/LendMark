@@ -63,6 +63,7 @@ class MyReservationFragment : Fragment() {
                     .whereEqualTo("userId", uid)
                     .get()
                     .addOnSuccessListener { snapshot ->
+                        if (!isAdded) return@addOnSuccessListener
                         reservationList = snapshot.documents.map { doc ->
                             ReservationFS(
                                 id = doc.id,
@@ -99,7 +100,7 @@ class MyReservationFragment : Fragment() {
             R.id.filterFinished ->
                 reservationList.filter {
                     it.status == "finished" ||
-                            it.status == "reviewed" ||   // ← 추가!
+                            it.status == "reviewed" ||
                             it.status == "canceled" ||
                             it.status == "expired"
                 }
@@ -132,11 +133,24 @@ class MyReservationFragment : Fragment() {
 
             resetCardToDefault(card)
 
+            // Show reservation detail dialog on card click
+            card.setOnClickListener {
+                val dialog = ReservationDetailDialogFS(
+                    reservation = reservation,
+                    onCancelClick = { reservationId -> showCancelConfirmationDialog(reservationId) },
+                    onRegisterClick = { showRegisterInfoDialog(reservation) }
+                )
+                dialog.show(parentFragmentManager, "ReservationDetailDialog")
+            }
+
             when (reservation.status) {
                 "approved" -> {
                     tvStatus.setTextColor(Color.WHITE)
                     tvStatus.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_status_green)
                     btnCancel.visibility = View.VISIBLE
+                    btnCancel.setOnClickListener {
+                        showCancelConfirmationDialog(reservation.id)
+                    }
                 }
 
                 "finished" -> {
@@ -152,7 +166,7 @@ class MyReservationFragment : Fragment() {
                     btnRegisterInfo.visibility = View.GONE
                     btnCancel.visibility = View.GONE
 
-                    setCardToReviewedState(card)  // 회색화 + 비활성화
+                    setCardToReviewedState(card)  // 회색화 (클릭은 가능)
                 }
 
                 "expired", "canceled" -> {
@@ -162,31 +176,53 @@ class MyReservationFragment : Fragment() {
                 }
             }
 
-            // -------------------------
-            //  리뷰 작성 버튼
-            // -------------------------
+            // 리스트 상의 리뷰 작성 버튼 동작
             btnRegisterInfo.setOnClickListener {
-                val dialog = RegisterInfoDialog { capacity, classType, tags, imageUris ->
-
-                    uploadReviewToFirestore(
-                        reservation = reservation,
-                        capacity = capacity,
-                        classType = classType,
-                        tags = tags,
-                        imageUris = imageUris
-                    )
-                }
-
-                dialog.show(parentFragmentManager, "RegisterInfoDialog")
+                showRegisterInfoDialog(reservation)
             }
 
             container.addView(card)
         }
     }
+
+    private fun showRegisterInfoDialog(reservation: ReservationFS) {
+        val dialog = RegisterInfoDialog { capacity, classType, tags, imageUris ->
+            uploadReviewToFirestore(
+                reservation = reservation,
+                capacity = capacity,
+                classType = classType,
+                tags = tags,
+                imageUris = imageUris
+            )
+        }
+        dialog.show(parentFragmentManager, "RegisterInfoDialog")
+    }
+
+    private fun showCancelConfirmationDialog(reservationId: String) {
+        val dialog = ConfirmCancelDialog {
+            cancelReservation(reservationId)
+        }
+        dialog.show(parentFragmentManager, "ConfirmCancelDialog")
+    }
+
+    private fun cancelReservation(reservationId: String) {
+        db.collection("reservations").document(reservationId)
+            .update("status", "canceled")
+            .addOnSuccessListener {
+                if (!isAdded) return@addOnSuccessListener
+                Toast.makeText(requireContext(), "Reservation Canceled", Toast.LENGTH_SHORT).show()
+                loadReservations() // Refresh list
+            }
+            .addOnFailureListener { e ->
+                if (!isAdded) return@addOnFailureListener
+                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
     private fun setCardToReviewedState(card: View) {
         val grayColor = ContextCompat.getColor(requireContext(), R.color.gray)
 
-        card.isClickable = false
+        // [수정됨] card.isClickable = false 삭제함 -> 이제 클릭 가능
         card.alpha = 0.5f   // 전체 흐리게
 
         card.findViewById<TextView>(R.id.tvBuildingRoom).setTextColor(grayColor)
@@ -228,36 +264,25 @@ class MyReservationFragment : Fragment() {
         reviewDoc.set(reviewData)
             .addOnSuccessListener {
 
-                // ---------------------------------------------------------
-                // 📌 Case 1) 이미지가 없는 경우 → 바로 reviewed 처리
-                // ---------------------------------------------------------
                 if (imageUris.isEmpty()) {
-
                     db.collection("reservations")
                         .document(reservation.id)
                         .update("status", "reviewed")
                         .addOnSuccessListener {
-                            loadReservations()  // UI 새로고침
+                            loadReservations()
                         }
-
                     Toast.makeText(requireContext(), "리뷰가 저장되었습니다!", Toast.LENGTH_SHORT).show()
                     return@addOnSuccessListener
                 }
 
-                // ---------------------------------------------------------
-                // 📌 Case 2) 이미지가 있는 경우 → 저장 후 reviewed 처리
-                // ---------------------------------------------------------
                 uploadImages(reservation.id, reviewDoc.id, imageUris) { urls ->
-
                     reviewDoc.update("imageUrls", urls)
-
                     db.collection("reservations")
                         .document(reservation.id)
                         .update("status", "reviewed")
                         .addOnSuccessListener {
-                            loadReservations()  // UI 새로고침
+                            loadReservations()
                         }
-
                     Toast.makeText(requireContext(), "리뷰가 저장되었습니다!", Toast.LENGTH_SHORT).show()
                 }
             }
