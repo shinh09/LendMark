@@ -25,7 +25,8 @@ import com.example.lendmark.ui.reservation.ReservationMapFragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.messaging.FirebaseMessaging
 class MainActivity : AppCompatActivity() {
 
     // ... (변수 선언부는 기존과 동일) ...
@@ -54,6 +55,7 @@ class MainActivity : AppCompatActivity() {
         initViews()
         loadUserData()
         setupListeners() // 리스너 설정
+        fetchFcmToken() // fcm 토큰 가져오기
 
         // 뒤로가기 콜백 설정 (OnBackPressedDispatcher)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -66,6 +68,48 @@ class MainActivity : AppCompatActivity() {
             replaceFragment(HomeFragment(), "LendMark", addToBackStack = false)
         }
     }
+
+    // fcm 토킁 가져오기
+    private fun fetchFcmToken() {
+        FirebaseMessaging.getInstance().token
+            .addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    Log.w("FCM", "Fetching FCM token failed", task.exception)
+                    return@addOnCompleteListener
+                }
+
+                val token = task.result
+                Log.d("FCM", " Current FCM Token: $token")
+
+                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                if (uid != null) {
+                    saveTokenToFirestore(uid, token)
+                } else {
+                    Log.w("FCM", "⚠ 사용자 로그인 상태가 아님 → 토큰 저장 생략")
+                }
+            }
+    }
+
+
+    //  fcm 토큰 저장
+    private fun saveTokenToFirestore(userId: String, token: String) {
+        val db = FirebaseFirestore.getInstance()
+
+        val data = mapOf(
+            "fcmToken" to token,
+            "updatedAt" to System.currentTimeMillis()
+        )
+
+        db.collection("users").document(userId)
+            .set(data, SetOptions.merge())
+            .addOnSuccessListener {
+                Log.d("FCM", "Token saved successfully")
+            }
+            .addOnFailureListener { e ->
+                Log.e("FCM", "Failed to save token", e)
+            }
+    }
+
 
     // ... (initViews, loadUserData는 기존과 동일) ...
 
