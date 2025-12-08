@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -7,19 +8,18 @@
     android:background="@color/white"
     tools:context=".ui.home.HomeFragment">
 
-    <ScrollView
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:clipToPadding="false">
-
+        android:fillViewport="true"
+        android:clipToPadding="false"
+        android:paddingBottom="200dp">
         <LinearLayout
             android:id="@+id/contentLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp"
-            android:paddingBottom="96dp">
-
+            android:padding="16dp">
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -68,7 +68,6 @@
                 android:visibility="gone"
                 tools:visibility="visible" />
 
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -83,9 +82,6 @@
                 android:layout_height="200dp"
                 android:layout_marginTop="8dp"/>
 
-
-
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -93,6 +89,7 @@
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:layout_marginTop="24dp"/>
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerFrequentlyUsed"
                 android:layout_width="match_parent"
@@ -107,6 +104,7 @@
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:layout_marginTop="24dp" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerRecentlyViewed"
                 android:layout_width="match_parent"
@@ -130,6 +128,7 @@
                     android:text="See all >"
                     android:layout_alignParentEnd="true" />
             </RelativeLayout>
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerBuildingList"
                 android:layout_width="match_parent"
@@ -137,7 +136,7 @@
                 android:layout_marginTop="8dp"/>
 
         </LinearLayout>
-    </ScrollView>
+    </androidx.core.widget.NestedScrollView>
 
     <include
         android:id="@+id/included_upcoming_reservation"
@@ -147,7 +146,7 @@
         android:layout_gravity="bottom"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="110dp"
+        android:layout_marginBottom="30dp"
         android:visibility="gone" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

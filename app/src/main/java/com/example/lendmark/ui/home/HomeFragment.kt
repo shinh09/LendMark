@@ -11,6 +11,7 @@ import android.view.inputmethod.InputMethodManager
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import com.example.lendmark.ui.my.ConfirmCancelDialog
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.lendmark.R
 import com.example.lendmark.databinding.FragmentHomeBinding
@@ -107,7 +108,7 @@ class HomeFragment : Fragment() {
 
     private fun observeViewModel() {
 
-        // ⭐ 공지 슬라이드
+        // 공지 슬라이드
         homeViewModel.announcementSlides.observe(viewLifecycleOwner) { items ->
             binding.viewPagerAnnouncements.adapter =
                 AnnouncementAdapter(
@@ -193,10 +194,19 @@ class HomeFragment : Fragment() {
 
                 ReservationDetailDialogFS(
                     reservation = reservation,
-                    onCancelClick = { updateStatus(reservation.id, "canceled") },
+                    onCancelClick = { showCancelConfirmationDialog(reservation.id) }, // ⭐ 여기 변경됨
                     onRegisterClick = { updateStatus(reservation.id, "finished") }
                 ).show(parentFragmentManager, "ReservationDetailDialogFS")
             }
+    }
+
+    // 2. 취소 확인 팝업 함수 (MyReservationFragment에 있는 것과 동일)
+    private fun showCancelConfirmationDialog(reservationId: String) {
+        val dialog = ConfirmCancelDialog {
+            // 'Yes' 눌렀을 때 실행될 로직
+            updateStatus(reservationId, "canceled")
+        }
+        dialog.show(parentFragmentManager, "ConfirmCancelDialog")
     }
 
     private fun updateStatus(id: String, status: String) {

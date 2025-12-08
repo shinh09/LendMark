@@ -6,10 +6,13 @@ import com.example.lendmark.data.local.RecentRoomEntity
 import com.example.lendmark.data.sources.announcement.*
 import com.example.lendmark.ui.home.adapter.Room
 import com.example.lendmark.ui.main.MyApp
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+
 
 data class UpcomingReservationInfo(
     val reservationId: String,
@@ -98,6 +101,7 @@ class HomeViewModel : ViewModel() {
                     return@addOnSuccessListener
                 }
 
+                // 1. 가장 많이 쓴 강의실 top 3 계산
                 val roomCounts = docs.mapNotNull { doc ->
                     val b = doc.getString("buildingId")
                     val r = doc.getString("roomId")
@@ -107,34 +111,42 @@ class HomeViewModel : ViewModel() {
                 val top = roomCounts.entries.sortedByDescending { it.value }.take(3)
                 val result = mutableListOf<Room>()
 
-                top.forEach { entry ->
-                    val (buildingId, roomId) = entry.key.split(" ")
-                    db.collection("buildings").document(buildingId)
-                        .get()
-                        .addOnSuccessListener { doc ->
-                            val img = doc.getString("imageUrl") ?: ""
-                            result.add(Room("$buildingId Hall $roomId", img))
+                // 2. 건물 정보 가져와서 이름으로 변환
+                if (top.isEmpty()) {
+                    _frequentlyUsedRooms.value = emptyList()
+                } else {
+                    top.forEach { entry ->
+                        val (buildingId, roomId) = entry.key.split(" ")
 
-                            if (result.size == top.size) {
-                                _frequentlyUsedRooms.value = result
+                        db.collection("buildings").document(buildingId)
+                            .get()
+                            .addOnSuccessListener { doc ->
+                                val img = doc.getString("imageUrl") ?: ""
+                                val buildingName = doc.getString("name") ?: buildingId // 건물명 가져오기
+
+                                // "건물명 호실" 형태로 저장 (예: Dasan Hall 110)
+                                result.add(Room("$buildingName $roomId", img))
+
+                                if (result.size == top.size) {
+                                    _frequentlyUsedRooms.value = result
+                                }
                             }
-                        }
+                    }
                 }
             }
     }
 
+    // HomeViewModel.kt
     private fun loadUpcomingReservation() {
         if (uid == null) {
             _upcomingReservation.value = null
             return
         }
 
+        // 1. 예약 정보 가져오기
         db.collection("reservations")
             .whereEqualTo("userId", uid)
             .whereEqualTo("status", "approved")
-            .whereGreaterThanOrEqualTo("timestamp", Timestamp.now())
-            .orderBy("timestamp")
-            .limit(1)
             .get()
             .addOnSuccessListener { snap ->
                 if (snap.isEmpty) {
@@ -142,20 +154,88 @@ class HomeViewModel : ViewModel() {
                     return@addOnSuccessListener
                 }
 
-                val doc = snap.documents.first()
+                val now = System.currentTimeMillis()
+                val oneHourInMillis = 60 * 60 * 1000
+                val oneHourLater = now + oneHourInMillis
 
-                val buildingId = doc.getString("buildingId") ?: ""
-                val roomId = doc.getString("roomId") ?: ""
-                val start = doc.getLong("periodStart")?.toInt() ?: 0
-                val end = doc.getLong("periodEnd")?.toInt() ?: 0
-                val date = doc.getString("date") ?: ""
+                // 2. 1시간 이내 예약 찾기
+                val targetDoc = snap.documents.firstOrNull { doc ->
+                    val dateStr = doc.getString("date") ?: ""
+                    val periodStart = doc.getLong("periodStart")?.toInt() ?: -1
 
-                _upcomingReservation.value = UpcomingReservationInfo(
-                    reservationId = doc.id,
-                    roomName = "$buildingId $roomId",
-                    time = "$date • ${periodToTime(start)} - ${periodToTime(end)}"
-                )
+                    if (dateStr.isNotEmpty() && periodStart != -1) {
+                        val startTimeMillis = convertToMillis(dateStr, periodStart)
+                        startTimeMillis in now..oneHourLater
+                    } else {
+                        false
+                    }
+                }
+
+                if (targetDoc != null) {
+                    val buildingId = targetDoc.getString("buildingId") ?: ""
+                    val roomId = targetDoc.getString("roomId") ?: ""
+                    val start = targetDoc.getLong("periodStart")?.toInt() ?: 0
+                    val end = targetDoc.getLong("periodEnd")?.toInt() ?: 0
+                    val date = targetDoc.getString("date") ?: ""
+
+                    // 3. 건물 이름 가져오기 (Nested Query)
+                    db.collection("buildings").document(buildingId).get()
+                        .addOnSuccessListener { buildingDoc ->
+                            val buildingName = buildingDoc.getString("name") ?: ""
+
+                            // 포맷 변경: "2. Dasan Hall - no.110"
+                            val formattedRoomName = "$buildingName $roomId"
+
+                            // 시간 수정: 끝나는 교시에 +1 (예: 8-9교시 -> 16:00~18:00)
+                            val formattedTime = "$date • ${periodToTime(start)} - ${periodToTime(end + 1)}"
+
+                            _upcomingReservation.value = UpcomingReservationInfo(
+                                reservationId = targetDoc.id,
+                                roomName = formattedRoomName,
+                                time = formattedTime
+                            )
+                        }
+                        .addOnFailureListener {
+                            // 건물 정보 실패 시 기존 방식대로
+                            _upcomingReservation.value = UpcomingReservationInfo(
+                                reservationId = targetDoc.id,
+                                roomName = "$buildingId $roomId",
+                                time = "$date • ${periodToTime(start)} - ${periodToTime(end + 1)}"
+                            )
+                        }
+                } else {
+                    _upcomingReservation.value = null
+                }
             }
+            .addOnFailureListener {
+                _upcomingReservation.value = null
+            }
+    }
+
+    // 날짜(String) + 교시(Int) -> 시간(Long) 변환 함수 추가
+    private fun convertToMillis(dateStr: String, periodStart: Int): Long {
+        return try {
+            // 날짜 포맷 (DB에 저장된 형태가 "yyyy-MM-dd" 라고 가정)
+            // 만약 "yyyy.MM.dd" 등을 쓴다면 아래 패턴을 수정해야 합니다.
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val date = sdf.parse(dateStr) ?: return 0L
+
+            val calendar = Calendar.getInstance()
+            calendar.time = date
+
+            // 교시 -> 시간 변환 (0교시 = 08시, 1교시 = 09시 ...)
+            val hourOfDay = 8 + periodStart
+
+            calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
+            calendar.set(Calendar.MINUTE, 0)
+            calendar.set(Calendar.SECOND, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+
+            calendar.timeInMillis
+        } catch (e: Exception) {
+            e.printStackTrace()
+            0L
+        }
     }
 
     private fun periodToTime(period: Int): String {
