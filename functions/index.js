@@ -376,3 +376,156 @@ ${prettyList}
     return { ok: false, error: err.message };
   }
 });
+
+/* ======================================================
+   6. 스케줄러: 1분마다 돌면서 예약 알림 발송 (Cron Job)
+   ====================================================== */
+exports.sendScheduledNotifications = onSchedule(
+  { schedule: "every 1 minutes", region: REGION },
+  async (event) => {
+    const db = admin.firestore();
+    const now = admin.firestore.Timestamp.now();
+
+    // 1. 아직 안 보냈고(sent==false), 보낼 시간이 된(sendAt <= now) 알림 찾기
+    const snapshot = await db.collection("scheduled_notifications")
+      .where("sent", "==", false)
+      .where("sendAt", "<=", now)
+      .get();
+
+    if (snapshot.empty) {
+      return;
+    }
+
+    const promises = [];
+    const batch = db.batch();
+
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      const { token, title, body } = data;
+
+      // 2. 메시지 구성
+      const message = {
+        token: token,
+        notification: {
+          title: title,
+          body: body,
+        },
+        data: {
+          reservationId: data.reservationId || "",
+        },
+      };
+
+      // 3. 실제 발송 요청
+      const sendPromise = admin.messaging().send(message)
+        .then(() => {
+          logger.info(`Notification sent to ${doc.id}`);
+          // 성공 시 DB에 '보냈음' 표시
+          batch.update(doc.ref, { sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp() });
+        })
+        .catch((err) => {
+          logger.error(`Failed to send to ${doc.id}:`, err);
+          // 실패 시 로깅만 하고, 무한 루프 방지를 위해 일단 sent 처리 하거나 재시도 로직 추가 가능
+          // 여기서는 에러만 찍고 넘어감
+        });
+
+      promises.push(sendPromise);
+    });
+
+    // 4. 병렬 처리 및 DB 업데이트
+    await Promise.all(promises);
+    await batch.commit();
+
+    logger.info(`Processed ${snapshot.size} notifications.`);
+  }
+);
+
+/* ======================================================
+   7. 예약 감지 트리거 (한국 시간 KST + 건물명 표시)
+   ====================================================== */
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+
+exports.onReservationCreated = onDocumentCreated(
+    { document: "reservations/{reservationId}", region: REGION },
+    async (event) => {
+
+    const reservation = event.data.data();
+    const reservationId = event.params.reservationId;
+    const db = admin.firestore();
+
+    const { userId, buildingId, roomId, date, periodStart, periodEnd } = reservation;
+
+    if (!userId || !date) return;
+
+    console.log(`[Trigger] New reservation detected: ${reservationId}`);
+
+    // 1. 유저 토큰 찾기
+    const userDoc = await db.collection("users").doc(userId).get();
+    const fcmToken = userDoc.get("fcmToken");
+
+    if (!fcmToken) {
+        console.log("No FCM token found.");
+        return;
+    }
+
+    // ⭐ 건물 이름 가져오기
+    // buildingId(예: "53")를 이용해 buildings 컬렉션에서 실제 이름(예: "Dasan Hall")으로 조회
+    const buildingDoc = await db.collection("buildings").doc(buildingId).get();
+    // 건물이름이 있으면 쓰고, 없으면 그냥 번호(53) 씀
+    const buildingName = buildingDoc.exists ? (buildingDoc.data().name || buildingId) : buildingId;
+
+    // ⭐ [중요 ]2. 한국 시간(KST) 계산 함수
+    // 서버(UTC)는 우리가 11시라고 하면 영국 11시(한국 20시)로 인식함.
+    // 그래서 강제로 9시간을 빼줘서 한국 시간 11시(영국 02시)로 맞춰야 함.
+    function getKstDate(dateStr, hour) {
+        const [year, month, day] = dateStr.split("-").map(Number);
+        const dateObj = new Date(year, month - 1, day, hour, 0, 0);
+        dateObj.setHours(dateObj.getHours() - 9); // UTC+9 보정
+        return dateObj;
+    }
+
+    const baseHour = 8;
+    const ps = Number(periodStart);
+    const pe = Number(periodEnd);
+
+    const startDate = getKstDate(date, baseHour + ps);
+    const endDate = getKstDate(date, baseHour + pe + 1);
+
+    const startMinus30 = new Date(startDate.getTime() - 30 * 60 * 1000);
+    const endMinus10 = new Date(endDate.getTime() - 10 * 60 * 1000);
+
+    // 3. 알림 스케줄 DB에 저장
+    const batch = db.batch();
+
+    // (1) 시작 30분 전
+    const startNotiRef = db.collection("scheduled_notifications").doc();
+    batch.set(startNotiRef, {
+        userId,
+        reservationId,
+        token: fcmToken,
+        title: "예약 시작 30분 전 알림",
+        // ⭐ [수정] 건물 번호 대신 건물 이름 사용
+        body: `${buildingName} ${roomId}호 예약이 30분 뒤에 시작됩니다.`,
+        sendAt: admin.firestore.Timestamp.fromDate(startMinus30),
+        sent: false,
+        type: "start",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // (2) 종료 10분 전
+    const endNotiRef = db.collection("scheduled_notifications").doc();
+    batch.set(endNotiRef, {
+        userId,
+        reservationId,
+        token: fcmToken,
+        title: "예약 종료 10분 전 알림",
+        // ⭐ [수정] 건물 번호 대신 건물 이름 사용
+        body: `${buildingName} ${roomId}호 예약 종료까지 10분 남았습니다.`,
+        sendAt: admin.firestore.Timestamp.fromDate(endMinus10),
+        sent: false,
+        type: "end",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+    console.log(`[Trigger] Created 2 KST notifications with Building Name for ${reservationId}`);
+});
